@@ -30,32 +30,75 @@ files of the same input are the same. The build of Python is the one that the
 uv of `mise.toml` installs, so a bump of uv gives a new layer of Python with
 the same Pyjoyment, and the Pyjoyment of the layers is the one of `uv.lock`.
 
-`layers.toml` lists the versions of Python and the architectures, and
-`layers.py` builds them, `build` all of them or one with `--python` and
-`--arch`, in `dist`, and gives them to the workflow Build as its matrix,
-`matrix`, one job for each version and architecture:
+`layers.py` is an application of `Pyjoyment.Lite`, whose configuration is
+`layers.toml` of `TOMLConfig`, with the versions of Python, the architectures
+and the runtimes of Python of Lambda, and whose commands are those of the
+namespace `LambdaLayers.Command`, with their options of `getopt` and their
+usage of their docstrings, as the commands of Pyjoyment: `build` builds the
+layers in `dist`, all of them or one version and architecture with `--python`
+and `--arch`, `matrix` gives them to the workflows as their matrix, one job for
+each version and architecture, and `publish` publishes them. The code that
+they share is `LambdaLayers`.
 
 ```sh
 mise exec -- uv run python layers.py build --python 3.14 --arch arm64
+mise exec -- uv run python layers.py publish --python 3.14 --arch arm64
 ```
 
 `generate lambda-zip` writes the ZIP files of the application of the current
-directory, so `layers.py` runs it in a temporary directory with
-`pyproject.toml` and `uv.lock` only, as the default application of Pyjoyment,
-and leaves its `function.zip` there. The layer of Pyjoyment has no code of an
-architecture, so the builds of both architectures write the same file.
+directory, so `build` runs it in a temporary directory with `pyproject.toml`
+and `uv.lock` only, as the default application of Pyjoyment, and leaves its
+`function.zip` there. The layer of Pyjoyment has no code of an architecture,
+so the builds of both architectures write the same file, and only the first
+architecture of `layers.toml` publishes it, so that two jobs do not publish it
+at the same time.
 
-The publication compares the `CodeSha256` of the latest version of a layer
-with the SHA-256 of the file, and publishes only what differs, so a run is
-started by hand or on a schedule, not on a push, and a run that failed is run
-again.
+`publish` takes the regions that the account has enabled from
+`account:ListRegions`, and compares the `CodeSha256` of the latest version of
+each layer in each of them, the highest version of `ListLayerVersions`, with
+the SHA-256 of its file. It only shows what it would publish, unless
+`--apply` is given, which only the workflow of the publication gives, so that
+a run anywhere else changes nothing. With `--apply`, it publishes the files
+that differ and makes the latest versions public, also a version that an
+earlier run published and did not make public, as `AddLayerVersionPermission`
+answers 409 for a version that is public already, and writes the ARNs of the
+latest versions in `dist`. A run is started by hand or on a schedule, not on a
+push, and a run that failed is run again.
+
+The workflow Publish runs `build` and `publish` in a job for each version of
+Python and architecture of the matrix. A pull request runs them without
+`--apply`, with the role that only reads, so that it shows what it would
+publish; the schedule, weekly, and a dispatch on `main` run them with
+`--apply`, in the environment `publishing`, which takes `main` only and waits
+for no approval, as the code on `main` comes through pull requests, and the
+last job merges the ARNs of the jobs into the artifact `layers.json`,
+`{layer: {region: arn}}`. A pull request of a fork has no role to assume, so
+it has no dry run.
+
+The requests are signed with the credentials of the environment, which
+`Pyjo.AWS.SigV4` reads, not with a profile of AWS, so a run on a machine with
+a profile of SSO exports its credentials first:
+
+```sh
+eval "$(aws configure export-credentials --profile <profile> --format env)"
+```
+
+or puts them in `.env`, which `.gitignore` ignores, and which `uv run` reads:
+
+```sh
+mise exec -- uv run --env-file .env python layers.py publish --python 3.14 --arch arm64
+```
+
+`t/layers_commands.py` runs the commands against an application of Pyjoyment
+that serves the APIs of AWS that they use, by the `endpoint` of `publish`.
 
 ## The Account
 
 `tofu/` is the configuration of the account `959435416781`: the OIDC provider
 of GitHub, the role `Pyjoyment-Lambda-Layers-publishing`, which only the jobs
-of the environment `publishing` of this repository assume, the regions that
-need an opt-in, and the bucket of its own state. It is applied by hand, with
+of the environment `publishing` of this repository assume, the role
+`Pyjoyment-Lambda-Layers-dry-run`, which only reads, for the jobs of its pull
+requests, the regions that need an opt-in, and the bucket of its own state. It is applied by hand, with
 the credentials of `AWS_PROFILE`, never by CI, and `allowed_account_ids` of
 the provider stops a profile of another account before it changes anything:
 
@@ -178,8 +221,8 @@ GITHUB_TOKEN=$(gh auth token) trunk check --all --no-fix
 
 Its pyright needs the environment of `uv sync`, `.venv`, which `tool.pyright`
 of `pyproject.toml` names, as the code imports Pyjoyment; Trunk Check of CI
-runs `uv sync` first. The modules of `Pyjo` of the repository are checked in
-strict mode, and the tests are not checked: for them pyright takes the regular
+runs `uv sync` first. `LambdaLayers` and the modules of `Pyjo` of the repository are
+checked in strict mode, and the tests are not checked: for them pyright takes the regular
 package `Pyjo` of Pyjoyment, which hides the modules of the checkout.
 
 The workflows that start the checks of a commit of the token of a workflow, as
@@ -195,8 +238,9 @@ files:
 - `.pypirc`
 - `*.jks`, `*.keystore`, `*.p12`, `*.pfx`, `*.pem`, `*.key`
 
-The rules of `permissions.deny` of `.claude/settings.json` enforce it for
-Claude Code, as in Pyjoyment.
+The same list is git-ignored in `.gitignore`, and the rules of
+`permissions.deny` of `.claude/settings.json` enforce it for Claude Code, as
+in Pyjoyment: change all three together.
 
 The publication runs with the credentials of the OIDC of GitHub, of a role of
 the account that only the environment `publishing` of this repository assumes,

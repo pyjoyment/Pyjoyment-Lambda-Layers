@@ -44,12 +44,10 @@ import Pyjo.Base
 import Pyjo.Exception
 import Pyjo.Message.Request
 
-from Pyjo.Util import url_escape
+from Pyjo.Util import getenv, hmac_sha256_sum, sha256_sum, url_escape
 
 import datetime
-import hashlib
 import hmac
-import os
 
 
 _ALGORITHM = 'AWS4-HMAC-SHA256'
@@ -94,7 +92,7 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
         or ``s3``.
         """
 
-        self.region = region or os.environ.get('AWS_REGION') or os.environ.get('AWS_DEFAULT_REGION') or 'us-east-1'
+        self.region = region or getenv('AWS_REGION') or getenv('AWS_DEFAULT_REGION') or 'us-east-1'
         """::
 
             region = signer.region
@@ -105,18 +103,18 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
         ``us-east-1``.
         """
 
-        self.access_key_id = access_key_id if access_key_id is not None else os.environ.get('AWS_ACCESS_KEY_ID')
+        self.access_key_id = access_key_id if access_key_id is not None else _environ('AWS_ACCESS_KEY_ID')
         """::
 
             access_key_id = signer.access_key_id
             signer.access_key_id = 'AKIDEXAMPLE'
 
         The access key ID, defaults to the value of the ``AWS_ACCESS_KEY_ID``
-        environment variable.
+        environment variable, unless it is empty.
         """
 
         self.secret_access_key = (
-            secret_access_key if secret_access_key is not None else os.environ.get('AWS_SECRET_ACCESS_KEY')
+            secret_access_key if secret_access_key is not None else _environ('AWS_SECRET_ACCESS_KEY')
         )
         """::
 
@@ -124,10 +122,10 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
             signer.secret_access_key = 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY'
 
         The secret access key, defaults to the value of the
-        ``AWS_SECRET_ACCESS_KEY`` environment variable.
+        ``AWS_SECRET_ACCESS_KEY`` environment variable, unless it is empty.
         """
 
-        self.session_token = session_token if session_token is not None else os.environ.get('AWS_SESSION_TOKEN')
+        self.session_token = session_token if session_token is not None else _environ('AWS_SESSION_TOKEN')
         """::
 
             session_token = signer.session_token
@@ -135,7 +133,7 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
 
         The session token of temporary credentials, as those of a role,
         defaults to the value of the ``AWS_SESSION_TOKEN`` environment
-        variable, sent in the header ``X-Amz-Security-Token``.
+        variable, unless it is empty, sent in the header ``X-Amz-Security-Token``.
         """
 
         self.normalize_path = normalize_path
@@ -201,7 +199,7 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
         """
         if (value := req.headers.header('X-Amz-Content-Sha256')) is not None:
             return value
-        return hashlib.sha256(req.body).hexdigest()
+        return sha256_sum(req.body)
 
     def scope(self, req: Pyjo.Message.Request.object) -> str:
         """::
@@ -258,9 +256,11 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
         if self.secret_access_key is None:
             raise Pyjo.Exception.new('No credentials of AWS')
         key = ('AWS4' + self.secret_access_key).encode()
+        # The key of the scope, which each part of it derives from the one before, as the bytes of an HMAC, which
+        # Pyjo.Util gives only in hexadecimal
         for part in (self._date(req)[:8], self.region, self.service, 'aws4_request'):
             key = hmac.digest(key, part.encode(), 'sha256')
-        return hmac.new(key, self.string_to_sign(req).encode(), 'sha256').hexdigest()
+        return hmac_sha256_sum(self.string_to_sign(req).encode(), key)
 
     def string_to_sign(self, req: Pyjo.Message.Request.object) -> str:
         """::
@@ -270,7 +270,7 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
         The string to sign of a request with the headers that :meth:`sign`
         sets.
         """
-        canonical = hashlib.sha256(self.canonical_request(req).encode()).hexdigest()
+        canonical = sha256_sum(self.canonical_request(req).encode())
         return '\n'.join((_ALGORITHM, self._date(req), self.scope(req), canonical))
 
     def _canonical_path(self, req: Pyjo.Message.Request.object) -> str:
@@ -309,6 +309,11 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
 
 def _escape(string: str) -> str:
     return url_escape(string.encode()).decode('ascii')
+
+
+# A variable of the environment, where an empty one is none, as the SDKs of AWS take it
+def _environ(name: str) -> str | None:
+    return getenv(name) or None
 
 
 new = Pyjo_AWS_SigV4.new

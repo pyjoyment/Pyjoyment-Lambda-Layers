@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - .github/workflows/build.yaml
+      - LambdaLayers/**
       - layers.py
       - layers.toml
       - mise.lock
@@ -17,6 +18,7 @@ on:
       - "*"
     paths:
       - .github/workflows/build.yaml
+      - LambdaLayers/**
       - layers.py
       - layers.toml
       - mise.lock

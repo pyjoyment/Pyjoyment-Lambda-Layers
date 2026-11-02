@@ -1,4 +1,6 @@
 import Pyjo.AWS.SigV4
+import Pyjo.File
+import Pyjo.JSON
 import Pyjo.Message.Request
 import Pyjo.UserAgent
 
@@ -6,15 +8,13 @@ from Pyjo.Test import *
 from Pyjoyment.Lite import *
 
 import datetime
-import json
 import os
-import pathlib
 import re
 
 
 # Signature Version 4 of AWS
 
-SUITE = pathlib.Path(__file__).parent / 'aws-signing-test-suite' / 'v4'
+SUITE = Pyjo.File.curfile().sibling('aws-signing-test-suite', 'v4')
 
 # The suite sends a path as it is, also with a space or UTF-8 that HTTP sends percent-encoded, which the double encoding
 # encodes again; and a session token that is not signed is the one of AWS IoT
@@ -49,14 +49,14 @@ def signer(**kwargs):
     )
 
 
-for case in sorted(SUITE.iterdir()):
-    with subtest(case.name):
-        if case.name in SKIP:
-            skip(SKIP[case.name], 5)
+for case in SUITE.list(dir=True):
+    with subtest(name := case.basename()):
+        if name in SKIP:
+            skip(SKIP[name], 5)
             continue
-        context = json.loads((case / 'context.json').read_text())
+        context = Pyjo.JSON.decode_json(case.child('context.json').slurp())
         credentials = context['credentials']
-        req = parse((case / 'request.txt').read_bytes())
+        req = parse(case.child('request.txt').slurp())
         ok(req.is_finished, 'request parsed')
         sigv4 = Pyjo.AWS.SigV4.new(
             service=context['service'],
@@ -68,10 +68,12 @@ for case in sorted(SUITE.iterdir()):
             content_sha256=context['sign_body'],
         )
         sigv4.sign(req, datetime.datetime.fromisoformat(context['timestamp']))
-        is_ok(sigv4.canonical_request(req), (case / 'header-canonical-request.txt').read_text(), 'canonical request')
-        is_ok(sigv4.string_to_sign(req), (case / 'header-string-to-sign.txt').read_text(), 'string to sign')
-        is_ok(sigv4.signature(req), (case / 'header-signature.txt').read_text(), 'signature')
-        signed = parse((case / 'header-signed-request.txt').read_bytes())
+        is_ok(
+            sigv4.canonical_request(req), case.child('header-canonical-request.txt').slurp('UTF-8'), 'canonical request'
+        )
+        is_ok(sigv4.string_to_sign(req), case.child('header-string-to-sign.txt').slurp('UTF-8'), 'string to sign')
+        is_ok(sigv4.signature(req), case.child('header-signature.txt').slurp('UTF-8'), 'signature')
+        signed = parse(case.child('header-signed-request.txt').slurp())
         is_ok(req.headers.authorization, signed.headers.authorization, 'header Authorization')
 
 with subtest('Credentials of the environment'):
@@ -94,6 +96,11 @@ with subtest('Credentials of the environment'):
         del os.environ['AWS_DEFAULT_REGION']
         is_ok(Pyjo.AWS.SigV4.new(service='lambda').region, 'us-east-1', 'region of no environment')
         is_ok(Pyjo.AWS.SigV4.new(service='lambda', session_token='other').session_token, 'other', 'token of argument')
+        os.environ['AWS_SESSION_TOKEN'] = ''
+        is_ok(Pyjo.AWS.SigV4.new(service='lambda').session_token, None, 'empty token of the environment is none')
+        req = request('GET', 'https://lambda.us-east-1.amazonaws.com/')
+        Pyjo.AWS.SigV4.new(service='lambda').sign(req, DATE)
+        is_ok(req.headers.header('X-Amz-Security-Token'), None, 'no header of an empty token')
         for name in ('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'):
             del os.environ[name]
         req = request('GET', 'https://lambda.us-east-1.amazonaws.com/')

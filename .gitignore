@@ -26,5 +26,17 @@ tfplan
 # Logs, as tf.log of the wrapper tf of OpenTofu
 *.log
 
+# Secrets, as in the rules of .claude/settings.json
+.env
+.env.*
+.envrc
+.pypirc
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+
 # macOS
 .DS_Store

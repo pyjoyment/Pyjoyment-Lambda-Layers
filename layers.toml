@@ -4,3 +4,11 @@ python = ["3.12", "3.13", "3.14", "3.14t", "3.15", "3.15t"]
 
 # The architectures of AWS Lambda
 architectures = ["arm64", "x86_64"]
+
+# The runtimes of Python of AWS Lambda, which the layer of Pyjoyment of the same
+# version serves too, where Lambda takes them as CompatibleRuntimes
+runtimes = ["python3.12", "python3.13", "python3.14"]
+
+# The regions of the account that the layers are not published in, as one that
+# does not answer
+excluded_regions = ["me-south-1"]
