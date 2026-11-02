@@ -71,6 +71,9 @@ in the coroutine of a region, which `Pyjo.Iterator.map` runs ahead, so that
 the regions come out in their order as they are done. A layer of Python of 17
 MB to more than thirty regions one after another takes minutes, and a region
 that answers slowly holds back only one of the four.
+A request has 120 seconds at most and 60 without data, so a region that hangs
+or trickles fails after a minute or two, as `[fail]`, and the job of the
+workflow has 20 minutes, where the user agent has no limit by default.
 
 The commands report what they do in the log of the application, on the
 standard error, which `Pyjo.Log` flushes at each message, and not with

@@ -95,9 +95,11 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
             if not os.path.isfile(dist.child(f'{name}.zip')):
                 raise Pyjo.Exception.new(f'No file of the layer {name} in dist, which the command build writes')
 
-        # A layer of Python goes to a region far away in one request
+        # A layer of Python goes to a region far away in one request of seconds, and a region that hangs or trickles
+        # fails after a minute or two, where a request of the user agent has no limit by default
         ua = self.app.ua
-        ua.inactivity_timeout = 300
+        ua.inactivity_timeout = 60
+        ua.request_timeout = 120
 
         # The identity of the credentials first, so that the log shows the account and the role that the run used
         log = self.app.log

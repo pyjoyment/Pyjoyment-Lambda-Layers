@@ -73,7 +73,7 @@ jobs:
     environment: ${{ github.event_name != 'pull_request' && 'publishing' || '' }}
 
     runs-on: ubuntu-26.04-arm
-    timeout-minutes: 60
+    timeout-minutes: 20
 
     permissions:
       contents: read
