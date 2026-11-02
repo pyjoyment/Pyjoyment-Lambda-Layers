@@ -94,6 +94,11 @@ with subtest('Credentials of the environment'):
         del os.environ['AWS_DEFAULT_REGION']
         is_ok(Pyjo.AWS.SigV4.new(service='lambda').region, 'us-east-1', 'region of no environment')
         is_ok(Pyjo.AWS.SigV4.new(service='lambda', session_token='other').session_token, 'other', 'token of argument')
+        os.environ['AWS_SESSION_TOKEN'] = ''
+        is_ok(Pyjo.AWS.SigV4.new(service='lambda').session_token, None, 'empty token of the environment is none')
+        req = request('GET', 'https://lambda.us-east-1.amazonaws.com/')
+        Pyjo.AWS.SigV4.new(service='lambda').sign(req, DATE)
+        is_ok(req.headers.header('X-Amz-Security-Token'), None, 'no header of an empty token')
         for name in ('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'):
             del os.environ[name]
         req = request('GET', 'https://lambda.us-east-1.amazonaws.com/')

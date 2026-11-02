@@ -105,18 +105,18 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
         ``us-east-1``.
         """
 
-        self.access_key_id = access_key_id if access_key_id is not None else os.environ.get('AWS_ACCESS_KEY_ID')
+        self.access_key_id = access_key_id if access_key_id is not None else _environ('AWS_ACCESS_KEY_ID')
         """::
 
             access_key_id = signer.access_key_id
             signer.access_key_id = 'AKIDEXAMPLE'
 
         The access key ID, defaults to the value of the ``AWS_ACCESS_KEY_ID``
-        environment variable.
+        environment variable, unless it is empty.
         """
 
         self.secret_access_key = (
-            secret_access_key if secret_access_key is not None else os.environ.get('AWS_SECRET_ACCESS_KEY')
+            secret_access_key if secret_access_key is not None else _environ('AWS_SECRET_ACCESS_KEY')
         )
         """::
 
@@ -124,10 +124,10 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
             signer.secret_access_key = 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY'
 
         The secret access key, defaults to the value of the
-        ``AWS_SECRET_ACCESS_KEY`` environment variable.
+        ``AWS_SECRET_ACCESS_KEY`` environment variable, unless it is empty.
         """
 
-        self.session_token = session_token if session_token is not None else os.environ.get('AWS_SESSION_TOKEN')
+        self.session_token = session_token if session_token is not None else _environ('AWS_SESSION_TOKEN')
         """::
 
             session_token = signer.session_token
@@ -135,7 +135,7 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
 
         The session token of temporary credentials, as those of a role,
         defaults to the value of the ``AWS_SESSION_TOKEN`` environment
-        variable, sent in the header ``X-Amz-Security-Token``.
+        variable, unless it is empty, sent in the header ``X-Amz-Security-Token``.
         """
 
         self.normalize_path = normalize_path
@@ -309,6 +309,11 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
 
 def _escape(string: str) -> str:
     return url_escape(string.encode()).decode('ascii')
+
+
+# A variable of the environment, where an empty one is none, as the SDKs of AWS take it
+def _environ(name: str) -> str | None:
+    return os.environ.get(name) or None
 
 
 new = Pyjo_AWS_SigV4.new
