@@ -3,6 +3,8 @@
   "files": {
     "includes": [
       "**",
+      // The cases of the AWS Signing Test Suite, which the tests read as they are
+      "!**/t/aws-signing-test-suite/v4",
       // Rewritten by trunk upgrade
       "!**/.trunk"
     ]
