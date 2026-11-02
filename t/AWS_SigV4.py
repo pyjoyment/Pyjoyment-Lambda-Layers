@@ -156,6 +156,7 @@ with subtest('Path'):
 
 with subtest('User agent'):
     received = {}
+    app.log.level = 'fatal'
 
     @post('/2018-10-31/layers/<name>/versions')
     def publish(c):
