@@ -1,0 +1,104 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/build.yaml
+      - layers.py
+      - layers.toml
+      - mise.lock
+      - mise.toml
+      - pyproject.toml
+      - uv.lock
+  pull_request:
+    branches:
+      - "*"
+    paths:
+      - .github/workflows/build.yaml
+      - layers.py
+      - layers.toml
+      - mise.lock
+      - mise.toml
+      - pyproject.toml
+      - uv.lock
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    name: Matrix
+
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 10
+
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up mise
+        uses: jdx/mise-action@v5
+        with:
+          version: 2026.10.25 # datasource=github-releases depName=jdx/mise
+
+      - name: Install
+        run: uv sync
+
+      - name: Matrix of layers.toml
+        id: matrix
+        run: echo "matrix=$(uv run python layers.py matrix)" >> "$GITHUB_OUTPUT"
+
+  # Each job builds the layer of Python of its version and architecture, and
+  # the layer of Pyjoyment of its version, which is the same for both
+  # architectures
+  build:
+    name: build (python ${{ matrix.python }}, ${{ matrix.arch }})
+
+    needs: matrix
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up mise
+        uses: jdx/mise-action@v5
+        with:
+          version: 2026.10.25 # datasource=github-releases depName=jdx/mise
+
+      - name: Install
+        run: uv sync
+
+      - name: Build
+        env:
+          ARCH: ${{ matrix.arch }}
+          PYTHON: ${{ matrix.python }}
+        run: uv run python layers.py build --python "$PYTHON" --arch "$ARCH"
+
+      - name: Summary
+        run: |
+          {
+            echo '```'
+            cd dist && sha256sum -- *.zip
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the layers
+        uses: actions/upload-artifact@v7
+        with:
+          name: layers-python${{ matrix.python }}-${{ matrix.arch }}
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 7

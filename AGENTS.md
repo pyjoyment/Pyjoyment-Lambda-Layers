@@ -29,6 +29,22 @@ The command line of Pyjoyment builds the files, `generate lambda-zip`, whose
 files of the same input are the same. The build of Python is the one that the
 uv of `mise.toml` installs, so a bump of uv gives a new layer of Python with
 the same Pyjoyment, and the Pyjoyment of the layers is the one of `uv.lock`.
+
+`layers.toml` lists the versions of Python and the architectures, and
+`layers.py` builds them, `build` all of them or one with `--python` and
+`--arch`, in `dist`, and gives them to the workflow Build as its matrix,
+`matrix`, one job for each version and architecture:
+
+```sh
+mise exec -- uv run python layers.py build --python 3.14 --arch arm64
+```
+
+`generate lambda-zip` writes the ZIP files of the application of the current
+directory, so `layers.py` runs it in a temporary directory with
+`pyproject.toml` and `uv.lock` only, as the default application of Pyjoyment,
+and leaves its `function.zip` there. The layer of Pyjoyment has no code of an
+architecture, so the builds of both architectures write the same file.
+
 The publication compares the `CodeSha256` of the latest version of a layer
 with the SHA-256 of the file, and publishes only what differs, so a run is
 started by hand or on a schedule, not on a push, and a run that failed is run

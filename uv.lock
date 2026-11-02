@@ -5,11 +5,7 @@ requires-python = ">=3.12"
 [[package]]
 name = "pyjoyment"
 version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/b8/88/2783bd39bc5b1705b09d4b154417c7247c31dab6e9f0d9daf23f959b5046/pyjoyment-0.1.0.tar.gz", hash = "sha256:0cc500129516e9d6da0a0c56aa5b7968993f605bb115771994f80f89a67c801c", size = 1997837, upload-time = "2026-11-01T15:16:32.928Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7d/bb/af3eba515622d3bfd06b0185dbf5770f63b03510418921d3ab6b4796b96b/pyjoyment-0.1.0-py3-none-any.whl", hash = "sha256:b07a8c987599872f49e73a93a24ab8e0b35f71eebc57f9b4fef7444e9498d6e6", size = 1230320, upload-time = "2026-11-01T15:16:30.976Z" },
-]
+source = { git = "https://github.com/pyjoyment/Pyjoyment?rev=b6095f6dcca42917ba1dac5fd9317345ea26a21e#b6095f6dcca42917ba1dac5fd9317345ea26a21e" }
 
 [[package]]
 name = "pyjoyment-lambda-layers"
@@ -20,4 +16,4 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pyjoyment", specifier = ">=0.1.0" }]
+requires-dist = [{ name = "pyjoyment", git = "https://github.com/pyjoyment/Pyjoyment?rev=b6095f6dcca42917ba1dac5fd9317345ea26a21e" }]
