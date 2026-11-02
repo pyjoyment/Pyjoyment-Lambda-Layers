@@ -20,10 +20,14 @@ LambdaLayers.Command.publish - Publish command
 
 :mod:`LambdaLayers.Command.publish` compares the files of ``dist``, which
 :mod:`LambdaLayers.Command.build` writes, with the latest versions of their
-layers in every region that the account has enabled, and shows what it would
+layers in every region that the account has enabled, but the
+``excluded_regions`` of ``layers.toml``, and shows what it would
 publish. With ``--apply``, it publishes the files that differ, makes the
 latest versions public, and writes the ARNs of the latest versions of each
 layer in its regions in ``dist``, as ``python3_14-arm64.json``.
+
+A region that fails, as one that does not answer, is shown as ``[error]``
+with its error, the others go on, and the command fails at its end.
 
 The requests to the APIs of AWS are signed with :mod:`Pyjo.AWS.SigV4`, with
 the credentials of the environment.
@@ -70,7 +74,8 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
         if not (opts := getopt(arguments, {'a|arch=s': None, 'apply': None, 'p|python=s': None})) or arguments:
             raise Pyjo.Exception.new(self.usage)
         dist = self.app.home.child('dist')
-        selected = LambdaLayers.publications(self.app.config(), opts.python, opts.arch)
+        config = self.app.config()
+        selected = LambdaLayers.publications(config, opts.python, opts.arch)
         for name, _ in selected:
             if not os.path.isfile(dist.child(f'{name}.zip')):
                 raise Pyjo.Exception.new(f'No file of the layer {name} in dist, which the command build writes')
@@ -78,15 +83,26 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
         # A layer of Python goes to a region far away in one request
         ua = self.app.ua
         ua.inactivity_timeout = 300
-        regions = LambdaLayers.regions(ua, self.endpoint)
+        excluded = config.get('excluded_regions', [])
+        regions = [region for region in LambdaLayers.regions(ua, self.endpoint) if region not in excluded]
+        failed: list[str] = []
         for name, params in selected:
             path = dist.child(f'{name}.zip').to_str()
-            result = LambdaLayers.publish(ua, regions, name, params, path, bool(opts.apply), self.endpoint)
-            for region, action, arn in result:
+            arns: dict[str, str | None] = {}
+            for region, action, arn in LambdaLayers.publish(
+                ua, regions, name, params, path, bool(opts.apply), self.endpoint
+            ):
                 self._loud(f'  [{action}] {region} {name} {arn or ""}'.rstrip())
+                if action == 'error':
+                    failed.append(f'{region} {name}')
+                else:
+                    arns[region] = arn
             if opts.apply:
-                arns = {region: arn for region, _, arn in result}
                 dist.child(f'{name}.json').spew(Pyjo.JSON.to_json(arns, sort_keys=True) + '\n')
+
+        # A region that fails leaves the others to the end, and the command fails then
+        if failed:
+            raise Pyjo.Exception.new(f'Failed in {len(failed)} of the regions: {", ".join(failed)}')
 
 
 new = LambdaLayers_Command_publish.new

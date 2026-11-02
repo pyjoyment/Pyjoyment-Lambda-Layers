@@ -32,6 +32,7 @@ import sys
 import tempfile
 import urllib.parse
 
+from collections.abc import Iterator
 from typing import Any, cast
 
 
@@ -172,27 +173,30 @@ def publish(
     path: str,
     apply: bool = False,
     endpoint: str = ENDPOINT,
-) -> list[tuple[str, str, str | None]]:
+) -> Iterator[tuple[str, str, str | None]]:
     """Publish a layer in the regions where the latest version differs, only with apply, and make its latest
-    versions public, and the regions, what is done in each, and the ARNs of the latest versions."""
+    versions public: the region, what is done there, and the ARN of the latest version, or the error of a region
+    that fails, which leaves the others to go on, one after another."""
     with open(path, 'rb') as file:
         content = file.read()
     digest = base64.b64encode(hashlib.sha256(content).digest()).decode()
-    result: list[tuple[str, str, str | None]] = []
     for region in regions:
-        current = latest(ua, region, name, endpoint)
-        if current is not None and current['Content']['CodeSha256'] == digest:
-            action = 'keep'
-        elif apply:
-            action = 'publish'
-            body = {**params, 'Content': {'ZipFile': base64.b64encode(content).decode()}}
-            current = aws(ua, 'POST', 'lambda', region, f'{LAYERS}/{name}/versions', body, endpoint)[1]
-        else:
-            action, current = 'would publish', None
-        # Public, also a version that an earlier run published and did not make public, which 409 says it is already
-        if apply and current is not None:
-            policy = {'StatementId': 'public', 'Action': 'lambda:GetLayerVersion', 'Principal': '*'}
-            resource = f'{LAYERS}/{name}/versions/{current["Version"]}/policy'
-            aws(ua, 'POST', 'lambda', region, resource, policy, endpoint, (409,))
-        result.append((region, action, current['LayerVersionArn'] if current is not None else None))
-    return result
+        try:
+            current = latest(ua, region, name, endpoint)
+            if current is not None and current['Content']['CodeSha256'] == digest:
+                action = 'keep'
+            elif apply:
+                action = 'publish'
+                body = {**params, 'Content': {'ZipFile': base64.b64encode(content).decode()}}
+                current = aws(ua, 'POST', 'lambda', region, f'{LAYERS}/{name}/versions', body, endpoint)[1]
+            else:
+                action, current = 'would publish', None
+            # Public, also a version that an earlier run published and did not make public, which 409 says it is
+            if apply and current is not None:
+                policy = {'StatementId': 'public', 'Action': 'lambda:GetLayerVersion', 'Principal': '*'}
+                resource = f'{LAYERS}/{name}/versions/{current["Version"]}/policy'
+                aws(ua, 'POST', 'lambda', region, resource, policy, endpoint, (409,))
+        except Pyjo.Exception.object as e:
+            yield region, 'error', e.message.strip()
+            continue
+        yield region, action, current['LayerVersionArn'] if current is not None else None

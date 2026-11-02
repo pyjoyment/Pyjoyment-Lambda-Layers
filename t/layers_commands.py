@@ -98,6 +98,7 @@ with subtest('Usage'):
 # with the requests and their credential scopes
 versions = {}
 public = set()
+broken = set()
 policies = []
 requests = []
 aws = Pyjoyment.new()
@@ -116,6 +117,8 @@ def list_regions(c):
 
 
 def list_versions(c):
+    if c.param('region') in broken:
+        return c.render(json={'message': 'Service unavailable'}, status=503)
     if (layer := versions.get((c.param('region'), c.param('layer')))) is None:
         c.res.headers.header('X-Amzn-ErrorType', 'ResourceNotFoundException')
         return c.render(json={'Type': 'User', 'message': 'Layer not found'}, status=404)
@@ -242,6 +245,33 @@ with subtest('Apply'):
     )
     output = run('--python', '3.14', '--arch', config['architectures'][0], '--apply', command=publish)
     is_ok([line.split()[0] for line in output.splitlines()], ['[keep]'] * 4, 'nothing more to publish, already public')
+
+with subtest('Excluded region'):
+    config['excluded_regions'] = ['eu-central-1']
+    output = run('--python', '3.14', '--arch', config['architectures'][0], command=publish)
+    is_ok([line.split()[1] for line in output.splitlines()], ['us-east-1', 'us-east-1'], 'only the other region')
+    config['excluded_regions'] = []
+
+with subtest('Region that fails'):
+    broken.add('eu-central-1')
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        throws_ok(
+            lambda: publish.run('--python', '3.14', '--arch', config['architectures'][0]),
+            re.compile(rf'^Failed in 2 of the regions: eu-central-1 {python}, eu-central-1 {layer}'),
+            'fails at the end',
+        )
+    lines = [line for line in output.getvalue().splitlines() if line.startswith('  [')]
+    like_ok(
+        lines[0],
+        re.compile(rf'^  \[error\] eu-central-1 {python} GET \S+: 503 : Service unavailable$'),
+        'error of the region',
+    )
+    is_ok(
+        lines[1], f'  [keep] us-east-1 {python} arn:aws:lambda:us-east-1:959435416781:layer:{python}:1', 'others go on'
+    )
+    is_ok(len(lines), 4, 'every layer in every region')
+    broken.clear()
 
 with subtest('Errors'):
     throws_ok(
