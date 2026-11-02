@@ -18,6 +18,10 @@
     "minimumReleaseAge": "0 days"
   },
   "rebaseWhen": "conflicted",
+  "terraform": {
+    "description": "The configuration of tofu/ is applied by hand, without CI: Renovate would bump required_version as a version of Terraform, which OpenTofu does not follow, and the providers and their lock, which change what an apply does, are upgraded when the configuration is applied.",
+    "enabled": false
+  },
   "minimumReleaseAge": "1 day",
   "internalChecksFilter": "strict",
   "lockFileMaintenance": {
