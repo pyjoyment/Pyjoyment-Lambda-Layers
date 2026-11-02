@@ -3,7 +3,7 @@ name: Automated trunk upgrade
 # Runs trunk upgrade every day and keeps the changes in the pull request of
 # the branch automated/trunk-upgrade, which a comment /rerun on it runs again.
 # It works with the token of the workflow: a push and a pull request of that
-# token start no workflow, so the job starts Trunk Check on the
+# token start no workflow, so the job starts Tests and Trunk Check on the
 # branch with workflow_dispatch.
 on:
   issue_comment:
@@ -93,6 +93,7 @@ jobs:
       - name: Run the checks of the commit
         if: env.changes == 'true'
         run: |-
+          gh workflow run tests.yaml --ref "${BRANCH}"
           gh workflow run trunk-check.yaml --ref "${BRANCH}"
 
       - name: Close pull request

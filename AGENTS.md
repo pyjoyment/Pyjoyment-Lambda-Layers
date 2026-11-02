@@ -77,6 +77,44 @@ account starts with a local state: `tofu/backend_override.tf`, which
 the apply, which creates the bucket, and then, without the file,
 `tofu init -migrate-state`.
 
+## Signature Version 4
+
+`Pyjo.AWS.SigV4` signs the requests of `Pyjo.UserAgent` to the APIs of AWS,
+without an SDK. It is a module of the namespace `Pyjo` of Pyjoyment, which
+`extend_path` keeps open: the directory `Pyjo` of the repository has no
+`__init__.py`, only `Pyjo/AWS` has one, so that it can move to a distribution
+of its own without a change of its imports.
+
+The event `start` of the user agent signs a request, as it comes for each
+transaction, a redirect too, once the request is complete. The request has no
+`Host` and no `Content-Length` then, which `fix_headers` of the request adds
+when it is written, so `sign` sets `Host` itself, and `Content-Length` is not
+signed, which AWS does not require. The headers that a proxy or the user agent
+may change after the signature, as `User-Agent` and `Expect`, are not signed,
+as the SDKs of AWS leave them.
+
+The path of the canonical request is the one that HTTP sends, already
+percent-encoded, which `double_encode` encodes again, as every service but S3
+wants. `t/aws-signing-test-suite` has the cases of the test suite of
+aws-c-auth, kept as they are, which `biome.jsonc` leaves out. The suite sends a
+path with a space or UTF-8 as it is, which HTTP cannot, so the test skips
+those cases, and the one of a session token that is not signed, of AWS IoT,
+which `Pyjo.AWS.SigV4` does not have.
+
+## Tests
+
+The tests are scripts of `Pyjo.Test` in `t`, which `Pyjo.Prove` runs, on the
+reactor of asyncio and on the one of poll, in the development mode of Python,
+as the workflow Tests does:
+
+```sh
+PYTHONDEVMODE=1 mise exec -- uv run python -m Pyjo.Prove -l --capture-stderr -r t
+PYJO_REACTOR=Pyjo.Reactor.Poll PYTHONDEVMODE=1 mise exec -- uv run python -m Pyjo.Prove -l --capture-stderr -r t
+```
+
+`-l` puts the checkout in `PYTHONPATH`, where `extend_path` of the `Pyjo` of
+Pyjoyment finds the modules of `Pyjo` of the repository.
+
 ## Development
 
 ```sh

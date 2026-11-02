@@ -1,0 +1,57 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - "*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  # The tests on the Python of mise.toml, which runs the build and the
+  # publication, and the Pyjoyment of uv.lock, on both reactors, as in
+  # Pyjoyment.
+  tests:
+    name: Tests
+
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up mise
+        uses: jdx/mise-action@v5
+        with:
+          version: 2026.10.25 # datasource=github-releases depName=jdx/mise
+
+      - name: Install
+        run: uv sync
+
+      # As in Pyjoyment: invalid escape sequences and deprecated APIs fail, and
+      # the ResourceWarning of the development mode of Python, which only goes
+      # to the standard error, is checked in the output.
+      - name: Run the tests
+        shell: bash
+        env:
+          PYTHONDEVMODE: "1"
+          PYTHONWARNINGS: error::SyntaxWarning,error::DeprecationWarning
+        run: |
+          uv run python -m Pyjo.Prove -l --color --timeout 60 --capture-stderr --formatter "markdown=$GITHUB_STEP_SUMMARY" -r t 2>&1 | tee prove.log
+          if grep -n 'ResourceWarning:' prove.log; then exit 1; fi
+
+      - name: Run the tests on the reactor of poll
+        shell: bash
+        env:
+          PYJO_REACTOR: Pyjo.Reactor.Poll
+          PYTHONDEVMODE: "1"
+          PYTHONWARNINGS: error::SyntaxWarning,error::DeprecationWarning
+        run: |
+          uv run python -m Pyjo.Prove -l --color --timeout 60 --capture-stderr --formatter "markdown=$GITHUB_STEP_SUMMARY" -r t 2>&1 | tee prove.log
+          if grep -n 'ResourceWarning:' prove.log; then exit 1; fi
