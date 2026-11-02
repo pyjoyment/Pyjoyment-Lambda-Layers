@@ -34,6 +34,49 @@ with the SHA-256 of the file, and publishes only what differs, so a run is
 started by hand or on a schedule, not on a push, and a run that failed is run
 again.
 
+## The Account
+
+`tofu/` is the configuration of the account `959435416781`: the OIDC provider
+of GitHub, the role `Pyjoyment-Lambda-Layers-publishing`, which only the jobs
+of the environment `publishing` of this repository assume, the regions that
+need an opt-in, and the bucket of its own state. It is applied by hand, with
+the credentials of `AWS_PROFILE`, never by CI, and `allowed_account_ids` of
+the provider stops a profile of another account before it changes anything:
+
+```sh
+cd tofu
+mise exec -- tofu init
+mise exec -- tofu plan -out=tfplan
+mise exec -- tofu apply tfplan
+```
+
+The repository has the immutable subject of the OIDC tokens of GitHub, with
+the IDs of its owner and of itself,
+`repo:pyjoyment@351424207/Pyjoyment-Lambda-Layers@1443233156`, so the trust
+of the role names the IDs, not only the names, and a repository of the same
+name made anew does not get the role.
+
+A document of a policy takes no attribute of another resource, as the ARN of
+the OIDC provider in the trust of the role: such a value is unknown until the
+apply, and the plan shows the document as `(known after apply)` instead of its
+statements. The document builds the ARN from the account itself, and
+`depends_on` of the resource that uses it gives the order.
+
+The layers are published in every region that the account has enabled, which
+the publication takes from `account:ListRegions`, not from a list of its own.
+The configuration enables every region that needs an opt-in, as `aws_regions`
+lists them, so a new region of AWS is enabled by the next apply, and never
+disables one, which `prevent_destroy` keeps from happening, as the layers
+published there would go with it.
+
+The state is in the bucket `pyjoyment-tofu-state-959435416781` of
+`us-east-1`, with its versions and the lock file of the backend `s3`
+(`use_lockfile`), and the bucket is a resource of the same configuration. A new
+account starts with a local state: `tofu/backend_override.tf`, which
+`.gitignore` ignores, with `terraform { backend "local" {} }`, `tofu init` and
+the apply, which creates the bucket, and then, without the file,
+`tofu init -migrate-state`.
+
 ## Development
 
 ```sh

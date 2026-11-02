@@ -17,6 +17,14 @@ dist/
 .terraform/
 *.tfstate
 *.tfstate.*
+tfplan
+
+# The override of the backend of the first apply of a new account, with a local
+# state
+*_override.tf
+
+# Logs, as tf.log of the wrapper tf of OpenTofu
+*.log
 
 # macOS
 .DS_Store
