@@ -44,12 +44,10 @@ import Pyjo.Base
 import Pyjo.Exception
 import Pyjo.Message.Request
 
-from Pyjo.Util import url_escape
+from Pyjo.Util import getenv, hmac_sha256_sum, sha256_sum, url_escape
 
 import datetime
-import hashlib
 import hmac
-import os
 
 
 _ALGORITHM = 'AWS4-HMAC-SHA256'
@@ -94,7 +92,7 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
         or ``s3``.
         """
 
-        self.region = region or os.environ.get('AWS_REGION') or os.environ.get('AWS_DEFAULT_REGION') or 'us-east-1'
+        self.region = region or getenv('AWS_REGION') or getenv('AWS_DEFAULT_REGION') or 'us-east-1'
         """::
 
             region = signer.region
@@ -201,7 +199,7 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
         """
         if (value := req.headers.header('X-Amz-Content-Sha256')) is not None:
             return value
-        return hashlib.sha256(req.body).hexdigest()
+        return sha256_sum(req.body)
 
     def scope(self, req: Pyjo.Message.Request.object) -> str:
         """::
@@ -258,9 +256,11 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
         if self.secret_access_key is None:
             raise Pyjo.Exception.new('No credentials of AWS')
         key = ('AWS4' + self.secret_access_key).encode()
+        # The key of the scope, which each part of it derives from the one before, as the bytes of an HMAC, which
+        # Pyjo.Util gives only in hexadecimal
         for part in (self._date(req)[:8], self.region, self.service, 'aws4_request'):
             key = hmac.digest(key, part.encode(), 'sha256')
-        return hmac.new(key, self.string_to_sign(req).encode(), 'sha256').hexdigest()
+        return hmac_sha256_sum(self.string_to_sign(req).encode(), key)
 
     def string_to_sign(self, req: Pyjo.Message.Request.object) -> str:
         """::
@@ -270,7 +270,7 @@ class Pyjo_AWS_SigV4(Pyjo.Base.object):
         The string to sign of a request with the headers that :meth:`sign`
         sets.
         """
-        canonical = hashlib.sha256(self.canonical_request(req).encode()).hexdigest()
+        canonical = sha256_sum(self.canonical_request(req).encode())
         return '\n'.join((_ALGORITHM, self._date(req), self.scope(req), canonical))
 
     def _canonical_path(self, req: Pyjo.Message.Request.object) -> str:
@@ -313,7 +313,7 @@ def _escape(string: str) -> str:
 
 # A variable of the environment, where an empty one is none, as the SDKs of AWS take it
 def _environ(name: str) -> str | None:
-    return os.environ.get(name) or None
+    return getenv(name) or None
 
 
 new = Pyjo_AWS_SigV4.new

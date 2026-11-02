@@ -5,10 +5,9 @@ import Pyjo.Server
 import Pyjoyment
 
 from Pyjo.Test import *
+from Pyjo.Util import b64_decode, b64_encode, sha256_bytes
 
-import base64
 import contextlib
-import hashlib
 import io
 import os
 import re
@@ -29,7 +28,7 @@ def run(*args, command=None):
 
 
 def digest(content):
-    return base64.b64encode(hashlib.sha256(content).digest()).decode()
+    return b64_encode(sha256_bytes(content), '')
 
 
 with subtest('Names'):
@@ -139,7 +138,7 @@ def publish_version(c):
     version = {
         'Version': len(layer) + 1,
         'LayerVersionArn': f'arn:aws:lambda:{region}:959435416781:layer:{name}:{len(layer) + 1}',
-        'Content': {'CodeSha256': digest(base64.b64decode(body['Content']['ZipFile']))},
+        'Content': {'CodeSha256': digest(b64_decode(body['Content']['ZipFile']))},
         **{k: v for k, v in body.items() if k != 'Content'},
     }
     layer.append(version)

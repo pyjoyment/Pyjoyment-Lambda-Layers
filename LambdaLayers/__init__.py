@@ -19,17 +19,16 @@ so the build of each architecture writes it, and the first architecture of
 
 import Pyjo.Exception
 import Pyjo.File
+import Pyjo.Parameters
 import Pyjo.Transaction.HTTP
 import Pyjo.UserAgent
 
-from Pyjo.Util import b64_encode
+from Pyjo.Util import b64_encode, sha256_bytes
 
-import hashlib
 import importlib
 import importlib.metadata
 import subprocess
 import sys
-import urllib.parse
 
 from collections.abc import Iterator
 from typing import Any, cast
@@ -152,7 +151,7 @@ def latest(ua: Pyjo.UserAgent.object, region: str, name: str, endpoint: str = EN
     """The latest version of a layer in a region, or None."""
     version, marker = 0, ''
     while True:
-        query = urllib.parse.urlencode({'MaxItems': 50, **({'Marker': marker} if marker else {})})
+        query = Pyjo.Parameters.new({'MaxItems': 50, **({'Marker': marker} if marker else {})}).to_str()
         code, data = aws(ua, 'GET', 'lambda', region, f'{LAYERS}/{name}/versions?{query}', None, endpoint, (404,))
         if code == 404:
             return None
@@ -177,7 +176,7 @@ def publish(
     versions public: the region, what is done there, and the ARN of the latest version, or the error of a region
     that fails, which leaves the others to go on, one after another."""
     content = cast(bytes, path.slurp())
-    digest = b64_encode(hashlib.sha256(content).digest(), '')
+    digest = b64_encode(sha256_bytes(content), '')
     for region in regions:
         try:
             current = latest(ua, region, name, endpoint)
