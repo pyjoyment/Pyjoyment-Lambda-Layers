@@ -73,6 +73,12 @@ a profile of SSO exports its credentials first:
 eval "$(aws configure export-credentials --profile <profile> --format env)"
 ```
 
+or puts them in `.env`, which `.gitignore` ignores, and which `uv run` reads:
+
+```sh
+mise exec -- uv run --env-file .env python layers.py publish --python 3.14 --arch arm64
+```
+
 `t/layers_commands.py` runs the commands against an application of Pyjoyment
 that serves the APIs of AWS that they use, by the `endpoint` of `publish`.
 
@@ -221,8 +227,9 @@ files:
 - `.pypirc`
 - `*.jks`, `*.keystore`, `*.p12`, `*.pfx`, `*.pem`, `*.key`
 
-The rules of `permissions.deny` of `.claude/settings.json` enforce it for
-Claude Code, as in Pyjoyment.
+The same list is git-ignored in `.gitignore`, and the rules of
+`permissions.deny` of `.claude/settings.json` enforce it for Claude Code, as
+in Pyjoyment: change all three together.
 
 The publication runs with the credentials of the OIDC of GitHub, of a role of
 the account that only the environment `publishing` of this repository assumes,
