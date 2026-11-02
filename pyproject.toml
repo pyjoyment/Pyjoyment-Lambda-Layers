@@ -15,10 +15,10 @@ dependencies = ["Pyjoyment>=0.1.0"]
 package = false
 
 # TODO: Pyjoyment of PyPI again with the release after 0.1.0, whose generate lambda-zip installs the Python of the
-# machine; until then the commit of Git that has it, pinned, so that the layers have no other change that is not
-# released
+# machine, and whose Pyjo.Util has SHA-256; until then the commit of Git that has them, pinned, so that the layers have
+# no change that is not reviewed
 [tool.uv.sources]
-Pyjoyment = { git = "https://github.com/pyjoyment/Pyjoyment", rev = "b6095f6dcca42917ba1dac5fd9317345ea26a21e" }
+Pyjoyment = { git = "https://github.com/pyjoyment/Pyjoyment", rev = "86471ff3c08fede4dd5d95e63ba222f186bc16eb" }
 
 [tool.ruff]
 line-length = 120
