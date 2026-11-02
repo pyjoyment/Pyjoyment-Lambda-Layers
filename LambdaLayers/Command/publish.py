@@ -87,7 +87,7 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
         regions = [region for region in LambdaLayers.regions(ua, self.endpoint) if region not in excluded]
         failed: list[str] = []
         for name, params in selected:
-            path = dist.child(f'{name}.zip').to_str()
+            path = dist.child(f'{name}.zip')
             arns: dict[str, str | None] = {}
             for region, action, arn in LambdaLayers.publish(
                 ua, regions, name, params, path, bool(opts.apply), self.endpoint

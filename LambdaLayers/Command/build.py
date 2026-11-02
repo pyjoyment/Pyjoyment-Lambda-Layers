@@ -51,7 +51,7 @@ class LambdaLayers_Command_build(Pyjoyment.Command.object):
         home = self.app.home
         for python in [opts.python] if opts.python else config['python']:
             for arch in [opts.arch] if opts.arch else config['architectures']:
-                for path in LambdaLayers.build(home.to_str(), python, arch, home.child('dist').to_str()):
+                for path in LambdaLayers.build(home, python, arch, home.child('dist')):
                     self._loud(f'  [write] {path}')
 
 

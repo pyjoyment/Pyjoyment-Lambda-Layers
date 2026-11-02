@@ -18,18 +18,17 @@ so the build of each architecture writes it, and the first architecture of
 """
 
 import Pyjo.Exception
+import Pyjo.File
 import Pyjo.Transaction.HTTP
 import Pyjo.UserAgent
 
-import base64
+from Pyjo.Util import b64_encode
+
 import hashlib
 import importlib
 import importlib.metadata
-import os
-import shutil
 import subprocess
 import sys
-import tempfile
 import urllib.parse
 
 from collections.abc import Iterator
@@ -65,19 +64,19 @@ def matrix(config: Config) -> dict[str, list[dict[str, str]]]:
 
 # generate lambda-zip writes the ZIP files of the application of the current directory, so it runs in a directory of its
 # own with pyproject.toml and uv.lock only, whose function.zip is left there
-def build(home: str, python: str, arch: str, dist: str) -> list[str]:
+def build(home: Pyjo.File.object, python: str, arch: str, dist: Pyjo.File.object) -> list[Pyjo.File.object]:
     """Build the layers of Python and of Pyjoyment of a version and an architecture in a directory."""
-    os.makedirs(dist, exist_ok=True)
-    with tempfile.TemporaryDirectory() as tmp:
+    dist.make_path()
+    with Pyjo.File.tempdir() as tmp:
         for name in ('pyproject.toml', 'uv.lock'):
-            shutil.copyfile(os.path.join(home, name), os.path.join(tmp, name))
+            home.child(name).copy_to(tmp.child(name))
         command = [sys.executable, '-m', 'Pyjoyment', 'generate', 'lambda-zip', '--python', python, '--arch', arch]
         if (code := subprocess.run(command, cwd=tmp, stdout=subprocess.DEVNULL).returncode) != 0:
             raise Pyjo.Exception.new(f'Command "generate lambda-zip" failed with exit status {code}')
         files = {'python.zip': python_layer(python, arch), 'pyjoyment.zip': pyjoyment_layer(python)}
-        paths = [os.path.join(dist, f'{layer}.zip') for layer in files.values()]
-        for (name, _), path in zip(files.items(), paths, strict=True):
-            shutil.move(os.path.join(tmp, 'dist', name), path)
+        paths = [dist.child(f'{layer}.zip') for layer in files.values()]
+        for name, path in zip(files, paths, strict=True):
+            tmp.child('dist', name).move_to(path)
     return paths
 
 
@@ -170,16 +169,15 @@ def publish(
     regions: list[str],
     name: str,
     params: dict[str, Any],
-    path: str,
+    path: Pyjo.File.object,
     apply: bool = False,
     endpoint: str = ENDPOINT,
 ) -> Iterator[tuple[str, str, str | None]]:
     """Publish a layer in the regions where the latest version differs, only with apply, and make its latest
     versions public: the region, what is done there, and the ARN of the latest version, or the error of a region
     that fails, which leaves the others to go on, one after another."""
-    with open(path, 'rb') as file:
-        content = file.read()
-    digest = base64.b64encode(hashlib.sha256(content).digest()).decode()
+    content = cast(bytes, path.slurp())
+    digest = b64_encode(hashlib.sha256(content).digest(), '')
     for region in regions:
         try:
             current = latest(ua, region, name, endpoint)
@@ -187,7 +185,7 @@ def publish(
                 action = 'keep'
             elif apply:
                 action = 'publish'
-                body = {**params, 'Content': {'ZipFile': base64.b64encode(content).decode()}}
+                body = {**params, 'Content': {'ZipFile': b64_encode(content, '')}}
                 current = aws(ua, 'POST', 'lambda', region, f'{LAYERS}/{name}/versions', body, endpoint)[1]
             else:
                 action, current = 'would publish', None
