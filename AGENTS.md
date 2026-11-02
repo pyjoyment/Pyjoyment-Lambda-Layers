@@ -109,6 +109,19 @@ Biome would migrate fails the check. The definition of Biome in
 `.trunk/trunk.yaml` is the one of Pyjoyment, which explains why it is not the
 one of the plugin of Trunk.
 
+tflint checks `tofu/` with the rules of its plugins `terraform` and `aws`, from
+`.tflint.hcl` in the root of the repository, where the extensions of the
+editors find it. Trunk runs tflint in the directory of the files, where tflint
+looks for its configuration, so the definition of tflint in
+`.trunk/trunk.yaml` names the file in `TFLINT_CONFIG_FILE`. `tflint --init`
+downloads the plugins from the releases of GitHub, whose API limits the
+requests without a token, so Trunk Check of CI has `GITHUB_TOKEN`, and a local
+run that fails with the limit of the API takes the one of `gh`:
+
+```sh
+GITHUB_TOKEN=$(gh auth token) trunk check --all --no-fix
+```
+
 Its pyright needs the environment of `uv sync`, `.venv`, which `tool.pyright`
 of `pyproject.toml` names, as the code imports Pyjoyment; Trunk Check of CI
 runs `uv sync` first. The modules of `Pyjo` of the repository are checked in
