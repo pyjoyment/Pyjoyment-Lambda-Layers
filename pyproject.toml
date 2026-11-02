@@ -32,6 +32,13 @@ quote-style = "single"
 select = ["B", "E4", "E7", "E9", "F", "I", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
+# The script of Pyjoyment.Lite imports its functions, like `use Mojolicious::Lite` in Perl.
+"layers.py" = [
+  # F403 "`from Pyjoyment.Lite import *` used; unable to detect undefined names"
+  "F403",
+  # F405 "`plugin` may be undefined, or defined from star imports"
+  "F405",
+]
 # Test scripts import all test functions, like `use Test::More` in Perl.
 "t/**" = [
   # F403 "`from Pyjo.Test import *` used; unable to detect undefined names"
@@ -58,4 +65,4 @@ lines-after-imports = 2
 venvPath = "."
 venv = ".venv"
 typeCheckingMode = "off"
-strict = ["Pyjo/**", "layers.py"]
+strict = ["LambdaLayers/**", "Pyjo/**"]

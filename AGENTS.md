@@ -30,25 +30,51 @@ files of the same input are the same. The build of Python is the one that the
 uv of `mise.toml` installs, so a bump of uv gives a new layer of Python with
 the same Pyjoyment, and the Pyjoyment of the layers is the one of `uv.lock`.
 
-`layers.toml` lists the versions of Python and the architectures, and
-`layers.py` builds them, `build` all of them or one with `--python` and
-`--arch`, in `dist`, and gives them to the workflow Build as its matrix,
-`matrix`, one job for each version and architecture:
+`layers.py` is an application of `Pyjoyment.Lite`, whose configuration is
+`layers.toml` of `TOMLConfig`, with the versions of Python, the architectures
+and the runtimes of Python of Lambda, and whose commands are those of the
+namespace `LambdaLayers.Command`, with their options of `getopt` and their
+usage of their docstrings, as the commands of Pyjoyment: `build` builds the
+layers in `dist`, all of them or one version and architecture with `--python`
+and `--arch`, `matrix` gives them to the workflows as their matrix, one job for
+each version and architecture, and `publish` publishes them. The code that
+they share is `LambdaLayers`.
 
 ```sh
 mise exec -- uv run python layers.py build --python 3.14 --arch arm64
+mise exec -- uv run python layers.py publish --python 3.14 --arch arm64
 ```
 
 `generate lambda-zip` writes the ZIP files of the application of the current
-directory, so `layers.py` runs it in a temporary directory with
-`pyproject.toml` and `uv.lock` only, as the default application of Pyjoyment,
-and leaves its `function.zip` there. The layer of Pyjoyment has no code of an
-architecture, so the builds of both architectures write the same file.
+directory, so `build` runs it in a temporary directory with `pyproject.toml`
+and `uv.lock` only, as the default application of Pyjoyment, and leaves its
+`function.zip` there. The layer of Pyjoyment has no code of an architecture,
+so the builds of both architectures write the same file, and only the first
+architecture of `layers.toml` publishes it, so that two jobs do not publish it
+at the same time.
 
-The publication compares the `CodeSha256` of the latest version of a layer
-with the SHA-256 of the file, and publishes only what differs, so a run is
-started by hand or on a schedule, not on a push, and a run that failed is run
-again.
+`publish` takes the regions that the account has enabled from
+`account:ListRegions`, and compares the `CodeSha256` of the latest version of
+each layer in each of them, the highest version of `ListLayerVersions`, with
+the SHA-256 of its file. It only shows what it would publish, unless
+`--apply` is given, which only the workflow of the publication gives, so that
+a run anywhere else changes nothing. With `--apply`, it publishes the files
+that differ and makes the latest versions public, also a version that an
+earlier run published and did not make public, as `AddLayerVersionPermission`
+answers 409 for a version that is public already, and writes the ARNs of the
+latest versions in `dist`. A run is started by hand or on a schedule, not on a
+push, and a run that failed is run again.
+
+The requests are signed with the credentials of the environment, which
+`Pyjo.AWS.SigV4` reads, not with a profile of AWS, so a run on a machine with
+a profile of SSO exports its credentials first:
+
+```sh
+eval "$(aws configure export-credentials --profile <profile> --format env)"
+```
+
+`t/layers_commands.py` runs the commands against an application of Pyjoyment
+that serves the APIs of AWS that they use, by the `endpoint` of `publish`.
 
 ## The Account
 
@@ -178,8 +204,8 @@ GITHUB_TOKEN=$(gh auth token) trunk check --all --no-fix
 
 Its pyright needs the environment of `uv sync`, `.venv`, which `tool.pyright`
 of `pyproject.toml` names, as the code imports Pyjoyment; Trunk Check of CI
-runs `uv sync` first. The modules of `Pyjo` of the repository are checked in
-strict mode, and the tests are not checked: for them pyright takes the regular
+runs `uv sync` first. `LambdaLayers` and the modules of `Pyjo` of the repository are
+checked in strict mode, and the tests are not checked: for them pyright takes the regular
 package `Pyjo` of Pyjoyment, which hides the modules of the checkout.
 
 The workflows that start the checks of a commit of the token of a workflow, as
