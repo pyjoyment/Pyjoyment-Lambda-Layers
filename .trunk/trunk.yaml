@@ -81,6 +81,7 @@ lint:
           run_from: ${root_or_parent_with(biome.jsonc)}
       run_timeout: 1m
   enabled:
+    - tflint@0.65.0
     - actionlint@1.17.0
     # Renovate bumps it, and Biome Migrate migrates biome.jsonc on its branch;
     # the ! keeps it from trunk upgrade
