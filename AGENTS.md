@@ -65,6 +65,16 @@ answers 409 for a version that is public already, and writes the ARNs of the
 latest versions in `dist`. A run is started by hand or on a schedule, not on a
 push, and a run that failed is run again.
 
+The workflow Publish runs `build` and `publish` in a job for each version of
+Python and architecture of the matrix. A pull request runs them without
+`--apply`, with the role that only reads, so that it shows what it would
+publish; the schedule, weekly, and a dispatch on `main` run them with
+`--apply`, in the environment `publishing`, which takes `main` only and waits
+for no approval, as the code on `main` comes through pull requests, and the
+last job merges the ARNs of the jobs into the artifact `layers.json`,
+`{layer: {region: arn}}`. A pull request of a fork has no role to assume, so
+it has no dry run.
+
 The requests are signed with the credentials of the environment, which
 `Pyjo.AWS.SigV4` reads, not with a profile of AWS, so a run on a machine with
 a profile of SSO exports its credentials first:
@@ -86,8 +96,9 @@ that serves the APIs of AWS that they use, by the `endpoint` of `publish`.
 
 `tofu/` is the configuration of the account `959435416781`: the OIDC provider
 of GitHub, the role `Pyjoyment-Lambda-Layers-publishing`, which only the jobs
-of the environment `publishing` of this repository assume, the regions that
-need an opt-in, and the bucket of its own state. It is applied by hand, with
+of the environment `publishing` of this repository assume, the role
+`Pyjoyment-Lambda-Layers-dry-run`, which only reads, for the jobs of its pull
+requests, the regions that need an opt-in, and the bucket of its own state. It is applied by hand, with
 the credentials of `AWS_PROFILE`, never by CI, and `allowed_account_ids` of
 the provider stops a profile of another account before it changes anything:
 

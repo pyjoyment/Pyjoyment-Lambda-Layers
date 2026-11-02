@@ -1,0 +1,160 @@
+name: Publish
+
+# A pull request shows what the publication would do, with the role that only
+# reads; the schedule and a dispatch on main publish, with the role of the
+# environment publishing, which takes main only.
+on:
+  pull_request:
+    branches:
+      - "*"
+    paths:
+      - .github/workflows/publish.yaml
+      - LambdaLayers/**
+      - Pyjo/**
+      - layers.py
+      - layers.toml
+      - mise.lock
+      - mise.toml
+      - pyproject.toml
+      - uv.lock
+  schedule:
+    - cron: 17 5 * * 1
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+# Two publications never run at once, and a pull request waits for its own
+# run before
+concurrency:
+  group: publish-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  matrix:
+    name: Matrix
+
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 10
+
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up mise
+        uses: jdx/mise-action@v5
+        with:
+          version: 2026.10.25 # datasource=github-releases depName=jdx/mise
+
+      - name: Install
+        run: uv sync
+
+      - name: Matrix of layers.toml
+        id: matrix
+        run: echo "matrix=$(uv run python layers.py matrix)" >> "$GITHUB_OUTPUT"
+
+  # Each job builds and publishes the layer of Python of its version and
+  # architecture, and the layer of Pyjoyment of its version on the first
+  # architecture, in every region in turn. The token of OIDC of a pull request
+  # of a fork has no role to assume, so it has no dry run.
+  publish:
+    name: ${{ github.event_name == 'pull_request' && 'dry run' || 'publish' }} (python ${{ matrix.python }}, ${{ matrix.arch }})
+
+    needs: matrix
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+
+    environment: ${{ github.event_name != 'pull_request' && 'publishing' || '' }}
+
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 60
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      APPLY: ${{ github.event_name != 'pull_request' && '1' || '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up mise
+        uses: jdx/mise-action@v5
+        with:
+          version: 2026.10.25 # datasource=github-releases depName=jdx/mise
+
+      - name: Install
+        run: uv sync
+
+      - name: Build
+        env:
+          ARCH: ${{ matrix.arch }}
+          PYTHON: ${{ matrix.python }}
+        run: uv run python layers.py build --python "$PYTHON" --arch "$ARCH"
+
+      - name: Credentials of AWS
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::959435416781:role/Pyjoyment-Lambda-Layers-${{ env.APPLY && 'publishing' || 'dry-run' }}
+          aws-region: us-east-1
+
+      - name: Publish
+        env:
+          ARCH: ${{ matrix.arch }}
+          PYTHON: ${{ matrix.python }}
+        run: uv run python layers.py publish --python "$PYTHON" --arch "$ARCH" ${APPLY:+--apply}
+
+      - name: Upload the ARNs
+        if: env.APPLY
+        uses: actions/upload-artifact@v7
+        with:
+          name: arns-python${{ matrix.python }}-${{ matrix.arch }}
+          path: dist/*.json
+          if-no-files-found: error
+          retention-days: 90
+
+  # The ARNs of the latest versions of every layer in every region, as one
+  # index, {layer: {region: arn}}
+  index:
+    name: Index
+
+    needs: publish
+    if: github.event_name != 'pull_request'
+
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 10
+
+    steps:
+      - name: Download the ARNs
+        uses: actions/download-artifact@v8
+        with:
+          pattern: arns-*
+          merge-multiple: true
+          path: arns
+
+      - name: Index of the layers
+        run: |
+          for file in arns/*.json; do
+            jq --arg name "$(basename "$file" .json)" '{($name): .}' "$file"
+          done | jq -s 'add' > layers.json
+          {
+            echo '```json'
+            cat layers.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the index
+        uses: actions/upload-artifact@v7
+        with:
+          name: layers
+          path: layers.json
+          if-no-files-found: error
+          retention-days: 90
