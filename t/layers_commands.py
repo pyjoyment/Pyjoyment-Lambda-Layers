@@ -97,6 +97,7 @@ with subtest('Usage'):
 # with the requests and their credential scopes
 versions = {}
 public = set()
+callers = []
 broken = set()
 policies = []
 requests = []
@@ -105,6 +106,15 @@ aws.log.level = 'fatal'
 aws.hook(
     'before_dispatch', lambda c: requests.append((c.req.method, c.req.url.path.to_str(), c.req.headers.authorization))
 )
+
+
+IDENTITY = 'arn:aws:sts::959435416781:assumed-role/Pyjoyment-Lambda-Layers-dry-run/test'
+
+
+def caller_identity(c):
+    callers.append((c.param('Action'), c.param('Version'), c.req.headers.accept))
+    result = {'Account': '959435416781', 'Arn': IDENTITY, 'UserId': 'AROAEXAMPLE:test'}
+    c.render(json={'GetCallerIdentityResponse': {'GetCallerIdentityResult': result}})
 
 
 def list_regions(c):
@@ -157,6 +167,7 @@ def add_permission(c):
     c.render(json={'Statement': '{}'}, status=201)
 
 
+aws.routes.post('/us-east-1/sts/').to(cb=caller_identity)
 aws.routes.post('/us-east-1/account/listRegions').to(cb=list_regions)
 aws.routes.get('/<region>/lambda/2018-10-31/layers/<layer>/versions').to(cb=list_versions)
 aws.routes.post('/<region>/lambda/2018-10-31/layers/<layer>/versions').to(cb=publish_version)
@@ -192,6 +203,7 @@ with subtest('Dry run'):
     is_ok(
         output.splitlines(),
         [
+            f'  [identity] 959435416781 {IDENTITY}',
             f'  [would publish] eu-central-1 {python}',
             f'  [would publish] us-east-1 {python}',
             f'  [would publish] eu-central-1 {layer}',
@@ -200,6 +212,7 @@ with subtest('Dry run'):
         'what it would do, with the latest version on the second page',
     )
     is_ok([r for r in requests if r[0] == 'POST' and 'lambda' in r[1]], [], 'nothing published')
+    is_ok(callers[0], ('GetCallerIdentity', '2011-06-15', 'application/json'), 'GetCallerIdentity of STS, in JSON')
     ok(not os.path.exists(dist.child(f'{python}.json')), 'no ARNs')
     for method, path, authorization in requests:
         region, service = path.split('/')[1:3]
@@ -211,6 +224,7 @@ with subtest('Apply'):
     is_ok(
         output.splitlines(),
         [
+            f'  [identity] 959435416781 {IDENTITY}',
             f'  [publish] eu-central-1 {python} arn:aws:lambda:eu-central-1:959435416781:layer:{python}:1',
             f'  [publish] us-east-1 {python} arn:aws:lambda:us-east-1:959435416781:layer:{python}:1',
             f'  [publish] eu-central-1 {layer} arn:aws:lambda:eu-central-1:959435416781:layer:{layer}:1',
@@ -243,12 +257,14 @@ with subtest('Apply'):
         'ARNs',
     )
     output = run('--python', '3.14', '--arch', config['architectures'][0], '--apply', command=publish)
-    is_ok([line.split()[0] for line in output.splitlines()], ['[keep]'] * 4, 'nothing more to publish, already public')
+    is_ok(
+        [line.split()[0] for line in output.splitlines()[1:]], ['[keep]'] * 4, 'nothing more to publish, already public'
+    )
 
 with subtest('Excluded region'):
     config['excluded_regions'] = ['eu-central-1']
     output = run('--python', '3.14', '--arch', config['architectures'][0], command=publish)
-    is_ok([line.split()[1] for line in output.splitlines()], ['us-east-1', 'us-east-1'], 'only the other region')
+    is_ok([line.split()[1] for line in output.splitlines()[1:]], ['us-east-1', 'us-east-1'], 'only the other region')
     config['excluded_regions'] = []
 
 with subtest('Region that fails'):
@@ -260,7 +276,7 @@ with subtest('Region that fails'):
             re.compile(rf'^Failed in 2 of the regions: eu-central-1 {python}, eu-central-1 {layer}'),
             'fails at the end',
         )
-    lines = [line for line in output.getvalue().splitlines() if line.startswith('  [')]
+    lines = [line for line in output.getvalue().splitlines() if line.startswith('  [') and '[identity]' not in line]
     like_ok(
         lines[0],
         re.compile(rf'^  \[error\] eu-central-1 {python} GET \S+: 503 : Service unavailable$'),

@@ -18,12 +18,14 @@ LambdaLayers.Command.publish - Publish command
       -p, --python <version>   Version of Python, as "3.14" or "3.14t", all of
                                layers.toml by default
 
-:mod:`LambdaLayers.Command.publish` compares the files of ``dist``, which
+:mod:`LambdaLayers.Command.publish` shows the account and the ARN of the
+credentials first, of ``GetCallerIdentity`` of STS, so that the log tells
+where a run went, and compares the files of ``dist``, which
 :mod:`LambdaLayers.Command.build` writes, with the latest versions of their
 layers in every region that the account has enabled, but the
-``excluded_regions`` of ``layers.toml``, and shows what it would
-publish. With ``--apply``, it publishes the files that differ, makes the
-latest versions public, and writes the ARNs of the latest versions of each
+``excluded_regions`` of ``layers.toml``, and shows what it would publish.
+With ``--apply``, it publishes the files that differ, makes the latest
+versions public, and writes the ARNs of the latest versions of each
 layer in its regions in ``dist``, as ``python3_14-arm64.json``.
 
 A region that fails, as one that does not answer, is shown as ``[error]``
@@ -83,6 +85,11 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
         # A layer of Python goes to a region far away in one request
         ua = self.app.ua
         ua.inactivity_timeout = 300
+
+        # The identity of the credentials first, so that the log shows the account and the role that the run used
+        caller = LambdaLayers.identity(ua, self.endpoint)
+        self._loud(f'  [identity] {caller["Account"]} {caller["Arn"]}')
+
         excluded = config.get('excluded_regions', [])
         regions = [region for region in LambdaLayers.regions(ua, self.endpoint) if region not in excluded]
         failed: list[str] = []

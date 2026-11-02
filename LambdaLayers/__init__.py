@@ -113,10 +113,17 @@ def aws(
     body: dict[str, Any] | None = None,
     endpoint: str = ENDPOINT,
     allow: tuple[int, ...] = (),
+    form: dict[str, str] | None = None,
 ) -> tuple[int, Any]:
-    """A request to an API of AWS, signed, and the status and the JSON of its response."""
+    """A request to an API of AWS, signed, with a body of JSON or of a form, and the status and the JSON of its
+    response."""
     url = endpoint.format(service=service, region=region) + path
-    tx = ua.build_tx(method, url, json=body) if body is not None else ua.build_tx(method, url)
+    if form is not None:
+        tx = ua.build_tx(method, url, {'Accept': 'application/json'}, form=form)
+    elif body is not None:
+        tx = ua.build_tx(method, url, json=body)
+    else:
+        tx = ua.build_tx(method, url)
     signer: Any = SigV4.new(service=service, region=region)
 
     def sign(ua: Pyjo.UserAgent.object, tx: Pyjo.Transaction.HTTP.object) -> None:
@@ -133,6 +140,13 @@ def aws(
         message = fields.get('message') or fields.get('Message') or res.body.decode(errors='replace')
         raise Pyjo.Exception.new(f'{method} {url}: {code} {error}: {message}')
     return code, data
+
+
+def identity(ua: Pyjo.UserAgent.object, endpoint: str = ENDPOINT) -> dict[str, str]:
+    """The account and the ARN of the credentials, of GetCallerIdentity of STS, which every identity may call."""
+    form = {'Action': 'GetCallerIdentity', 'Version': '2011-06-15'}
+    _, data = aws(ua, 'POST', 'sts', 'us-east-1', '/', None, endpoint, form=form)
+    return data['GetCallerIdentityResponse']['GetCallerIdentityResult']
 
 
 def regions(ua: Pyjo.UserAgent.object, endpoint: str = ENDPOINT) -> list[str]:
