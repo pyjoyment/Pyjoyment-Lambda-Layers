@@ -133,4 +133,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |-
           gh workflow run biome-migrate.yaml --ref "$BRANCH"
+          gh workflow run tests.yaml --ref "$BRANCH"
           gh workflow run trunk-check.yaml --ref "$BRANCH"
