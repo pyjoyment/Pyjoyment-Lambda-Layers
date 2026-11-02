@@ -33,4 +33,8 @@ provider "aws" {
 locals {
   account_id = "959435416781"
   repository = "pyjoyment/Pyjoyment-Lambda-Layers"
+
+  # The immutable subject of the OIDC tokens of the repository, with the IDs of its owner and of itself, as
+  # sub_claim_prefix of `gh api repos/pyjoyment/Pyjoyment-Lambda-Layers/actions/oidc/customization/sub` gives it
+  subject = "repo:pyjoyment@351424207/Pyjoyment-Lambda-Layers@1443233156"
 }

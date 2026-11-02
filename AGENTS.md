@@ -50,6 +50,12 @@ mise exec -- tofu plan -out=tfplan
 mise exec -- tofu apply tfplan
 ```
 
+The repository has the immutable subject of the OIDC tokens of GitHub, with
+the IDs of its owner and of itself,
+`repo:pyjoyment@351424207/Pyjoyment-Lambda-Layers@1443233156`, so the trust
+of the role names the IDs, not only the names, and a repository of the same
+name made anew does not get the role.
+
 A document of a policy takes no attribute of another resource, as the ARN of
 the OIDC provider in the trust of the role: such a value is unknown until the
 apply, and the plan shows the document as `(known after apply)` instead of its

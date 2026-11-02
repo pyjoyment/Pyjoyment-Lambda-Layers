@@ -22,7 +22,7 @@ data "aws_iam_policy_document" "publishing_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.repository}:environment:publishing"]
+      values   = ["${local.subject}:environment:publishing"]
     }
   }
 }
