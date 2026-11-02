@@ -23,5 +23,8 @@ tfplan
 # state
 *_override.tf
 
+# Logs, as tf.log of the wrapper tf of OpenTofu
+*.log
+
 # macOS
 .DS_Store
