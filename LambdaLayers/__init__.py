@@ -19,7 +19,9 @@ so the build of each architecture writes it, and the first architecture of
 
 import Pyjo.Exception
 import Pyjo.File
+import Pyjo.Iterator
 import Pyjo.Parameters
+import Pyjo.Promise
 import Pyjo.Transaction.HTTP
 import Pyjo.UserAgent
 
@@ -30,7 +32,6 @@ import importlib.metadata
 import subprocess
 import sys
 
-from collections.abc import Iterator
 from typing import Any, cast
 
 
@@ -117,29 +118,27 @@ def aws(
 ) -> tuple[int, Any]:
     """A request to an API of AWS, signed, with a body of JSON or of a form, and the status and the JSON of its
     response."""
-    url = endpoint.format(service=service, region=region) + path
-    if form is not None:
-        tx = ua.build_tx(method, url, {'Accept': 'application/json'}, form=form)
-    elif body is not None:
-        tx = ua.build_tx(method, url, json=body)
-    else:
-        tx = ua.build_tx(method, url)
-    signer: Any = SigV4.new(service=service, region=region)
+    tx = _signed(ua, method, service, region, endpoint.format(service=service, region=region) + path, body, form)
+    return _result(ua.start(tx), allow)
 
-    def sign(ua: Pyjo.UserAgent.object, tx: Pyjo.Transaction.HTTP.object) -> None:
-        signer.sign(tx.req)
 
-    ua.once('start', sign)
-    res = ua.start(tx).res
-    if (code := res.code) is None:
-        raise Pyjo.Exception.new(f'{method} {url}: {tx.error["message"] if tx.error else "no response"}')
-    data: Any = res.json() if res.body else None
-    if code >= 300 and code not in allow:
-        error = (res.headers.header('X-Amzn-ErrorType') or '').split(':')[0]
-        fields = cast(dict[str, Any], data) if isinstance(data, dict) else {}
-        message = fields.get('message') or fields.get('Message') or res.body.decode(errors='replace')
-        raise Pyjo.Exception.new(f'{method} {url}: {code} {error}: {message}')
-    return code, data
+def aws_p(
+    ua: Pyjo.UserAgent.object,
+    method: str,
+    service: str,
+    region: str,
+    path: str,
+    body: dict[str, Any] | None = None,
+    endpoint: str = ENDPOINT,
+    allow: tuple[int, ...] = (),
+) -> Pyjo.Promise.object:
+    """Same as aws, but non-blocking, and a promise of the status and the JSON of the response."""
+    tx = _signed(ua, method, service, region, endpoint.format(service=service, region=region) + path, body, None)
+
+    def result(tx: Pyjo.Transaction.HTTP.object) -> tuple[int, Any]:
+        return _result(tx, allow)
+
+    return ua.start_p(tx).then(result)
 
 
 def identity(ua: Pyjo.UserAgent.object, endpoint: str = ENDPOINT) -> dict[str, str]:
@@ -161,12 +160,13 @@ def regions(ua: Pyjo.UserAgent.object, endpoint: str = ENDPOINT) -> list[str]:
         body['NextToken'] = token
 
 
-def latest(ua: Pyjo.UserAgent.object, region: str, name: str, endpoint: str = ENDPOINT) -> dict[str, Any] | None:
+async def latest(ua: Pyjo.UserAgent.object, region: str, name: str, endpoint: str = ENDPOINT) -> dict[str, Any] | None:
     """The latest version of a layer in a region, or None."""
     version, marker = 0, ''
     while True:
         query = Pyjo.Parameters.new({'MaxItems': 50, **({'Marker': marker} if marker else {})}).to_str()
-        code, data = aws(ua, 'GET', 'lambda', region, f'{LAYERS}/{name}/versions?{query}', None, endpoint, (404,))
+        path = f'{LAYERS}/{name}/versions?{query}'
+        code, data = await aws_p(ua, 'GET', 'lambda', region, path, None, endpoint, (404,))
         if code == 404:
             return None
         version = max([version, *(v['Version'] for v in data['LayerVersions'])])
@@ -174,7 +174,7 @@ def latest(ua: Pyjo.UserAgent.object, region: str, name: str, endpoint: str = EN
             break
     if not version:
         return None
-    return aws(ua, 'GET', 'lambda', region, f'{LAYERS}/{name}/versions/{version}', None, endpoint)[1]
+    return (await aws_p(ua, 'GET', 'lambda', region, f'{LAYERS}/{name}/versions/{version}', None, endpoint))[1]
 
 
 def publish(
@@ -185,29 +185,83 @@ def publish(
     path: Pyjo.File.object,
     apply: bool = False,
     endpoint: str = ENDPOINT,
-) -> Iterator[tuple[str, str, str | None]]:
+    concurrency: int = 4,
+) -> Pyjo.Iterator.Pyjo_Iterator[tuple[str, str, str | None]]:
     """Publish a layer in the regions where the latest version differs, only with apply, and make its latest
     versions public: the region, what is done there, and the ARN of the latest version, or the error of a region
-    that fails, which leaves the others to go on, one after another."""
+    that fails, which leaves the others to go on, in the order of the regions, as many of them at the same time as
+    the concurrency."""
     content = cast(bytes, path.slurp())
     digest = b64_encode(sha256_bytes(content), '')
-    for region in regions:
+
+    async def region_p(region: str) -> tuple[str, str, str | None]:
         try:
-            current = latest(ua, region, name, endpoint)
+            current = await latest(ua, region, name, endpoint)
             if current is not None and current['Content']['CodeSha256'] == digest:
                 action = 'keep'
             elif apply:
                 action = 'publish'
                 body = {**params, 'Content': {'ZipFile': b64_encode(content, '')}}
-                current = aws(ua, 'POST', 'lambda', region, f'{LAYERS}/{name}/versions', body, endpoint)[1]
+                current = (await aws_p(ua, 'POST', 'lambda', region, f'{LAYERS}/{name}/versions', body, endpoint))[1]
             else:
                 action, current = 'would publish', None
             # Public, also a version that an earlier run published and did not make public, which 409 says it is
             if apply and current is not None:
                 policy = {'StatementId': 'public', 'Action': 'lambda:GetLayerVersion', 'Principal': '*'}
                 resource = f'{LAYERS}/{name}/versions/{current["Version"]}/policy'
-                aws(ua, 'POST', 'lambda', region, resource, policy, endpoint, (409,))
-        except Pyjo.Exception.object as e:
-            yield region, 'error', e.message.strip()
-            continue
-        yield region, action, current['LayerVersionArn'] if current is not None else None
+                await aws_p(ua, 'POST', 'lambda', region, resource, policy, endpoint, (409,))
+        except Exception as e:
+            return region, 'error', _message(e)
+        return region, action, current['LayerVersionArn'] if current is not None else None
+
+    # The values of the coroutines, which map passes on, where its type has the coroutines themselves
+    results: Any = Pyjo.Iterator.new(regions).map(region_p, concurrency=concurrency)
+    return results
+
+
+# A request built and signed in the event start of the user agent, where it has its URL, of the application of a test
+# too, and its Host; only the transaction of the request, as several of them start at the same time
+def _signed(
+    ua: Pyjo.UserAgent.object,
+    method: str,
+    service: str,
+    region: str,
+    url: str,
+    body: dict[str, Any] | None,
+    form: dict[str, str] | None,
+) -> Pyjo.Transaction.HTTP.object:
+    if form is not None:
+        tx = ua.build_tx(method, url, {'Accept': 'application/json'}, form=form)
+    elif body is not None:
+        tx = ua.build_tx(method, url, json=body)
+    else:
+        tx = ua.build_tx(method, url)
+    signer: Any = SigV4.new(service=service, region=region)
+
+    def sign(ua: Pyjo.UserAgent.object, started: Pyjo.Transaction.HTTP.object) -> None:
+        if started is tx:
+            ua.unsubscribe('start', sign)
+            signer.sign(started.req)
+
+    ua.on('start', sign)
+    return tx
+
+
+# The status and the JSON of a response, or the error of AWS or of the connection
+def _result(tx: Pyjo.Transaction.HTTP.object, allow: tuple[int, ...]) -> tuple[int, Any]:
+    req, res = tx.req, tx.res
+    method, url = req.method, req.url.to_str()
+    if (code := res.code) is None:
+        raise Pyjo.Exception.new(f'{method} {url}: {tx.error["message"] if tx.error else "no response"}')
+    data: Any = res.json() if res.body else None
+    if code >= 300 and code not in allow:
+        error = (res.headers.header('X-Amzn-ErrorType') or '').split(':')[0]
+        fields = cast(dict[str, Any], data) if isinstance(data, dict) else {}
+        message = fields.get('message') or fields.get('Message') or res.body.decode(errors='replace')
+        raise Pyjo.Exception.new(f'{method} {url}: {code} {error}: {message}')
+    return code, data
+
+
+# The message of an error of a region, of Pyjo.Exception or of a promise rejected with a string
+def _message(e: BaseException) -> str:
+    return (e.message if isinstance(e, Pyjo.Exception.object) else str(e)).strip()

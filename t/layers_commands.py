@@ -198,16 +198,25 @@ versions[('us-east-1', layer)] = [
     {'Version': 1, 'LayerVersionArn': f'{arn}:1', 'Content': {'CodeSha256': digest(b'older')}},
 ]
 
+# The messages of the log of the application, with their level only
+app.log.format = lambda time, level, *lines: f'[{level}] {" ".join(map(str, lines))}\n'
+
+
+def logged(*args):
+    with app.log.capture('info') as messages:
+        publish.run(*args)
+    return [message.rstrip('\n') for message in messages]
+
+
 with subtest('Dry run'):
-    output = run('--python', '3.14', '--arch', config['architectures'][0], command=publish)
     is_ok(
-        output.splitlines(),
+        logged('--python', '3.14', '--arch', config['architectures'][0]),
         [
-            f'  [identity] 959435416781 {IDENTITY}',
-            f'  [would publish] eu-central-1 {python}',
-            f'  [would publish] us-east-1 {python}',
-            f'  [would publish] eu-central-1 {layer}',
-            f'  [keep] us-east-1 {layer} {arn}:2',
+            f'[info] [identity] 959435416781 {IDENTITY}',
+            f'[info] [would publish] eu-central-1 {python}',
+            f'[info] [would publish] us-east-1 {python}',
+            f'[info] [would publish] eu-central-1 {layer}',
+            f'[info] [keep] us-east-1 {layer} {arn}:2',
         ],
         'what it would do, with the latest version on the second page',
     )
@@ -220,15 +229,14 @@ with subtest('Dry run'):
 
 with subtest('Apply'):
     requests.clear()
-    output = run('--python', '3.14', '--arch', config['architectures'][0], '--apply', command=publish)
     is_ok(
-        output.splitlines(),
+        logged('--python', '3.14', '--arch', config['architectures'][0], '--apply'),
         [
-            f'  [identity] 959435416781 {IDENTITY}',
-            f'  [publish] eu-central-1 {python} arn:aws:lambda:eu-central-1:959435416781:layer:{python}:1',
-            f'  [publish] us-east-1 {python} arn:aws:lambda:us-east-1:959435416781:layer:{python}:1',
-            f'  [publish] eu-central-1 {layer} arn:aws:lambda:eu-central-1:959435416781:layer:{layer}:1',
-            f'  [keep] us-east-1 {layer} {arn}:2',
+            f'[info] [identity] 959435416781 {IDENTITY}',
+            f'[info] [publish] eu-central-1 {python} arn:aws:lambda:eu-central-1:959435416781:layer:{python}:1',
+            f'[info] [publish] us-east-1 {python} arn:aws:lambda:us-east-1:959435416781:layer:{python}:1',
+            f'[info] [publish] eu-central-1 {layer} arn:aws:lambda:eu-central-1:959435416781:layer:{layer}:1',
+            f'[info] [keep] us-east-1 {layer} {arn}:2',
         ],
         'published',
     )
@@ -256,42 +264,46 @@ with subtest('Apply'):
         f'{{"eu-central-1":"arn:aws:lambda:eu-central-1:959435416781:layer:{layer}:1","us-east-1":"{arn}:2"}}\n',
         'ARNs',
     )
-    output = run('--python', '3.14', '--arch', config['architectures'][0], '--apply', command=publish)
-    is_ok(
-        [line.split()[0] for line in output.splitlines()[1:]], ['[keep]'] * 4, 'nothing more to publish, already public'
-    )
+    lines = logged('--python', '3.14', '--arch', config['architectures'][0], '--apply')
+    is_ok([line.split()[1] for line in lines[1:]], ['[keep]'] * 4, 'nothing more to publish, already public')
 
 with subtest('Excluded region'):
     config['excluded_regions'] = ['eu-central-1']
-    output = run('--python', '3.14', '--arch', config['architectures'][0], command=publish)
-    is_ok([line.split()[1] for line in output.splitlines()[1:]], ['us-east-1', 'us-east-1'], 'only the other region')
+    lines = logged('--python', '3.14', '--arch', config['architectures'][0])
+    is_ok([line.split()[2] for line in lines[1:]], ['us-east-1', 'us-east-1'], 'only the other region')
     config['excluded_regions'] = []
 
 with subtest('Region that fails'):
     broken.add('eu-central-1')
-    output = io.StringIO()
-    with contextlib.redirect_stdout(output):
+    with app.log.capture('info') as messages:
         throws_ok(
             lambda: publish.run('--python', '3.14', '--arch', config['architectures'][0]),
             re.compile(rf'^Failed in 2 of the regions: eu-central-1 {python}, eu-central-1 {layer}'),
             'fails at the end',
         )
-    lines = [line for line in output.getvalue().splitlines() if line.startswith('  [') and '[identity]' not in line]
+    lines = [message.rstrip('\n') for message in messages][1:]
     like_ok(
         lines[0],
-        re.compile(rf'^  \[error\] eu-central-1 {python} GET \S+: 503 : Service unavailable$'),
+        re.compile(rf'^\[error\] \[fail\] eu-central-1 {python} GET \S+: 503 : Service unavailable$'),
         'error of the region',
     )
     is_ok(
-        lines[1], f'  [keep] us-east-1 {python} arn:aws:lambda:us-east-1:959435416781:layer:{python}:1', 'others go on'
+        lines[1],
+        f'[info] [keep] us-east-1 {python} arn:aws:lambda:us-east-1:959435416781:layer:{python}:1',
+        'others go on',
     )
     is_ok(len(lines), 4, 'every layer in every region')
     broken.clear()
 
+with subtest('Concurrency'):
+    with app.log.capture('info') as messages:
+        publish.run('--python', '3.14', '--arch', config['architectures'][0], '-c', '1')
+    is_ok(len(messages), 5, 'one region at a time')
+
 with subtest('Errors'):
     throws_ok(
         lambda: LambdaLayers.aws(app.ua, 'GET', 'lambda', 'us-east-1', '/fail', endpoint='/{region}/{service}'),
-        re.compile(r'^GET /us-east-1/lambda/fail: 400 ValidationException: Bad request'),
+        re.compile(r'^GET \S*/us-east-1/lambda/fail: 400 ValidationException: Bad request'),
         'error of AWS',
     )
     throws_ok(

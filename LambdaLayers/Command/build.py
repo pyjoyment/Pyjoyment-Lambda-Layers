@@ -17,7 +17,8 @@ LambdaLayers.Command.build - Build command
 
 :mod:`LambdaLayers.Command.build` builds the layers in ``dist``, with
 ``generate lambda-zip`` of Pyjoyment and the Pyjoyment of ``uv.lock``, as
-``python3_14-arm64.zip`` and ``pyjoyment-python3_14.zip``.
+``python3_14-arm64.zip`` and ``pyjoyment-python3_14.zip``, which it logs in the
+log of the application.
 """
 
 import LambdaLayers
@@ -52,7 +53,7 @@ class LambdaLayers_Command_build(Pyjoyment.Command.object):
         for python in [opts.python] if opts.python else config['python']:
             for arch in [opts.arch] if opts.arch else config['architectures']:
                 for path in LambdaLayers.build(home, python, arch, home.child('dist')):
-                    self._loud(f'  [write] {path}')
+                    self.app.log.info(f'[write] {path}')
 
 
 new = LambdaLayers_Command_build.new
