@@ -21,6 +21,9 @@ jobs:
 
     env:
       DO_NOT_TRACK: "1"
+      # tflint --init downloads its plugins from the releases of GitHub, whose
+      # API limits the requests without a token of the address of a runner
+      GITHUB_TOKEN: ${{ github.token }}
 
     steps:
       - name: Checkout

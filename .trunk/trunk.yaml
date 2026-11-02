@@ -35,6 +35,21 @@ downloads:
 # This is the section where you manage your linters. (https://docs.trunk.io/check/configuration)
 lint:
   definitions:
+    # tflint runs in the directory of the files of OpenTofu, where it looks for
+    # its configuration, which is in the root of the repository, where the
+    # extensions of the editors find it; the other variables are those of the
+    # plugin, as a definition replaces its list
+    - name: tflint
+      environment:
+        - name: PATH
+          list: ["${linter}"]
+        - name: TFLINT_PLUGIN_DIR
+          value: ${shared_cachedir}
+        - name: GITHUB_TOKEN
+          value: ${env.GITHUB_TOKEN}
+          optional: true
+        - name: TFLINT_CONFIG_FILE
+          value: ${workspace}/.tflint.hcl
     # Biome formats and lints CSS, HTML, JavaScript, JSON, Markdown and YAML,
     # with biome.jsonc. parse_regex is matched against the whole output of a
     # batch, so `^` needs `(?m)` to match at every line; without it Trunk
@@ -81,6 +96,7 @@ lint:
           run_from: ${root_or_parent_with(biome.jsonc)}
       run_timeout: 1m
   enabled:
+    - tflint@0.65.0
     - actionlint@1.17.0
     # Renovate bumps it, and Biome Migrate migrates biome.jsonc on its branch;
     # the ! keeps it from trunk upgrade
