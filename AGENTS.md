@@ -50,6 +50,12 @@ mise exec -- tofu plan -out=tfplan
 mise exec -- tofu apply tfplan
 ```
 
+A document of a policy takes no attribute of another resource, as the ARN of
+the OIDC provider in the trust of the role: such a value is unknown until the
+apply, and the plan shows the document as `(known after apply)` instead of its
+statements. The document builds the ARN from the account itself, and
+`depends_on` of the resource that uses it gives the order.
+
 The layers are published in every region that the account has enabled, which
 the publication takes from `account:ListRegions`, not from a list of its own.
 The configuration enables every region that needs an opt-in, as `aws_regions`

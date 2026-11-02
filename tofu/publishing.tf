@@ -10,7 +10,7 @@ data "aws_iam_policy_document" "publishing_trust" {
 
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
+      identifiers = ["arn:aws:iam::${local.account_id}:oidc-provider/token.actions.githubusercontent.com"]
     }
 
     condition {
@@ -30,6 +30,9 @@ data "aws_iam_policy_document" "publishing_trust" {
 resource "aws_iam_role" "publishing" {
   name               = "Pyjoyment-Lambda-Layers-publishing"
   assume_role_policy = data.aws_iam_policy_document.publishing_trust.json
+
+  # The provider of the principal of the trust, whose ARN the document builds itself
+  depends_on = [aws_iam_openid_connect_provider.github]
 }
 
 data "aws_iam_policy_document" "publishing" {
