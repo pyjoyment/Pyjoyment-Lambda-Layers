@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# The ZIP files of the layers, which "generate lambda-zip" writes
+dist/
+
+# Virtual environments of uv
+.venv
+.venv-*
+
+# Caches of the tools
+.ruff_cache/
+
+# The working directory of OpenTofu and its states; the lock of the providers
+# is committed
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# macOS
+.DS_Store
