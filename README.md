@@ -23,12 +23,16 @@ layer is never deleted.
 
 A function takes a layer by the ARN of a version, which the index of the
 layers gives, `layers.json` of each release, as `{layer: {region: arn}}`.
-The latest one is always at the same URL:
+The latest one is always at the same URL, which a one-liner of Pyjoyment
+reads with a JSON Pointer:
 
 ```sh
-curl -sL https://github.com/pyjoyment/Pyjoyment-Lambda-Layers/releases/latest/download/layers.json \
-  | jq -r '.["pyjoyment-python3_14"]["eu-central-1"]'
+uv run --with Pyjoyment python -m Pyjo \
+  'g("https://github.com/pyjoyment/Pyjoyment-Lambda-Layers/releases/latest/download/layers.json").json("/pyjoyment-python3_14/eu-central-1")'
 ```
+
+`curl -sL` of the same URL with `jq -r '.["pyjoyment-python3_14"]["eu-central-1"]'`
+gives the same without Python.
 
 A release, as `2026.11.03`, keeps its index, so that a deployment can stay
 on the layers of a day.
