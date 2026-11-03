@@ -198,7 +198,8 @@ def publish(
     async def region_p(region: str) -> tuple[str, str, str | None]:
         try:
             current = await latest(ua, region, name, endpoint)
-            if current is not None and current['Content']['CodeSha256'] == digest:
+            # The same content, with the same parameters, as the runtimes of a newer configuration
+            if current is not None and current['Content']['CodeSha256'] == digest and _same(current, params):
                 action = 'keep'
             elif apply:
                 action = 'publish'
@@ -218,6 +219,15 @@ def publish(
     # The values of the coroutines, which map passes on, where its type has the coroutines themselves
     results: Any = Pyjo.Iterator.new(regions).map(region_p, concurrency=concurrency)
     return results
+
+
+def _same(current: dict[str, Any], params: dict[str, Any]) -> bool:
+    """Whether a version of a layer has the parameters of a publication, with their lists in any order."""
+
+    def value(v: Any) -> Any:
+        return sorted(cast(list[str], v)) if isinstance(v, list) else v
+
+    return all(value(current.get(k)) == value(v) for k, v in params.items())
 
 
 def index(arns: Pyjo.File.object) -> dict[str, dict[str, str]]:
