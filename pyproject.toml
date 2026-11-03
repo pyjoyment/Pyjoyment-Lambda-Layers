@@ -8,17 +8,11 @@ license-files = ["LICENSE"]
 authors = [{ name = "Piotr Roszatycki", email = "piotr.roszatycki@gmail.com" }]
 requires-python = ">=3.12"
 # The Pyjoyment of the layers, which Renovate bumps in uv.lock
-dependencies = ["Pyjoyment>=0.1.0"]
+dependencies = ["Pyjoyment>=0.2.0"]
 
 # Not a package: the repository builds and publishes the layers, and installs nothing of its own
 [tool.uv]
 package = false
-
-# TODO: Pyjoyment of PyPI again with the release after 0.1.0, whose generate lambda-zip installs the Python of the
-# machine, whose Pyjo.Util has SHA-256, and whose bytecode of a free-threaded Python is the same on every machine;
-# until then the commit of Git that has them, pinned, so that the layers have no change that is not reviewed
-[tool.uv.sources]
-Pyjoyment = { git = "https://github.com/pyjoyment/Pyjoyment", rev = "ecb521f764668df334bdaf09f061aff90f163a84" }
 
 [tool.ruff]
 line-length = 120
