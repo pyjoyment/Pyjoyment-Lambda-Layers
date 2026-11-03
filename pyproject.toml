@@ -18,7 +18,7 @@ package = false
 # machine, whose Pyjo.Util has SHA-256, and whose bytecode of a free-threaded Python is the same on every machine;
 # until then the commit of Git that has them, pinned, so that the layers have no change that is not reviewed
 [tool.uv.sources]
-Pyjoyment = { git = "https://github.com/pyjoyment/Pyjoyment", rev = "bbdd7f5a5c7e35090459c58e91af32fb451ce12b" }
+Pyjoyment = { git = "https://github.com/pyjoyment/Pyjoyment", rev = "ecb521f764668df334bdaf09f061aff90f163a84" }
 
 [tool.ruff]
 line-length = 120
