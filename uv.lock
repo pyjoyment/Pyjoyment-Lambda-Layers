@@ -5,7 +5,7 @@ requires-python = ">=3.12"
 [[package]]
 name = "pyjoyment"
 version = "0.1.0"
-source = { git = "https://github.com/pyjoyment/Pyjoyment?rev=04f6a55fb4ddd7f9bcfe51ea6e46b88686aa1e75#04f6a55fb4ddd7f9bcfe51ea6e46b88686aa1e75" }
+source = { git = "https://github.com/pyjoyment/Pyjoyment?rev=bbdd7f5a5c7e35090459c58e91af32fb451ce12b#bbdd7f5a5c7e35090459c58e91af32fb451ce12b" }
 
 [[package]]
 name = "pyjoyment-lambda-layers"
@@ -16,4 +16,4 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pyjoyment", git = "https://github.com/pyjoyment/Pyjoyment?rev=04f6a55fb4ddd7f9bcfe51ea6e46b88686aa1e75" }]
+requires-dist = [{ name = "pyjoyment", git = "https://github.com/pyjoyment/Pyjoyment?rev=bbdd7f5a5c7e35090459c58e91af32fb451ce12b" }]
