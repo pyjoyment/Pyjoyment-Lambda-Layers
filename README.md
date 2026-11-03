@@ -17,7 +17,13 @@ regions of AWS, as
 `arn:aws:lambda:<region>:959435416781:layer:<name>:<version>`. A version of a
 layer is never deleted.
 
-`generate lambda-zip` of Pyjoyment builds the function that uses them.
+`generate lambda-zip --function-only` of Pyjoyment builds the function that
+uses them, `function.zip` alone, and names the layer of Pyjoyment that it
+needs:
+
+```sh
+./myapp.py generate lambda-zip --python 3.14 --arch arm64 --function-only
+```
 
 ## The ARNs
 
