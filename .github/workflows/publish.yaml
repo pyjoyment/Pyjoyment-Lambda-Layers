@@ -1,8 +1,8 @@
 name: Publish
 
-# A pull request shows what the publication would do, with the role that only
-# reads; the schedule and a dispatch on main publish, with the role of the
-# environment publishing, which takes main only.
+# A pull request and a dispatch in the mode dry-run show what the publication
+# would do, with the role that only reads; the schedule and a dispatch on main
+# publish, with the role of the environment publishing, which takes main only.
 on:
   pull_request:
     branches:
@@ -19,7 +19,15 @@ on:
       - uv.lock
   schedule:
     - cron: 17 5 * * 1
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Publish the layers, or show what the publication would do
+        type: choice
+        options:
+          - publish
+          - dry-run
+        default: publish
 
 permissions:
   contents: read
@@ -61,7 +69,7 @@ jobs:
   # architecture, in every region in turn. The token of OIDC of a pull request
   # of a fork has no role to assume, so it has no dry run.
   publish:
-    name: ${{ github.event_name == 'pull_request' && 'dry run' || 'publish' }} (python ${{ matrix.python }}, ${{ matrix.arch }})
+    name: ${{ (github.event_name == 'pull_request' || inputs.mode == 'dry-run') && 'dry run' || 'publish' }} (python ${{ matrix.python }}, ${{ matrix.arch }})
 
     needs: matrix
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -70,7 +78,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
 
-    environment: ${{ github.event_name != 'pull_request' && 'publishing' || '' }}
+    environment: ${{ github.event_name != 'pull_request' && inputs.mode != 'dry-run' && 'publishing' || '' }}
 
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 20
@@ -80,7 +88,7 @@ jobs:
       id-token: write
 
     env:
-      APPLY: ${{ github.event_name != 'pull_request' && '1' || '' }}
+      APPLY: ${{ github.event_name != 'pull_request' && inputs.mode != 'dry-run' && '1' || '' }}
       # The log of the commands without the time and the process, which the log of GitHub Actions has
       PYJO_LOG_FORMAT: plain
 
@@ -131,7 +139,7 @@ jobs:
     name: Index
 
     needs: publish
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && inputs.mode != 'dry-run'
 
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 10
