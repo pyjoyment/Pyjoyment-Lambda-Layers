@@ -88,9 +88,21 @@ Python and architecture of the matrix. A pull request runs them without
 publish; the schedule, weekly, and a dispatch on `main` run them with
 `--apply`, in the environment `publishing`, which takes `main` only and waits
 for no approval, as the code on `main` comes through pull requests, and the
-last job merges the ARNs of the jobs into the artifact `layers.json`,
-`{layer: {region: arn}}`. A pull request of a fork has no role to assume, so
-it has no dry run.
+last job merges the ARNs of the jobs into `layers.json`,
+`{layer: {region: arn}}`, with its keys sorted. A pull request of a fork has no
+role to assume, so it has no dry run.
+
+The index is released when it differs from the `layers.json` of the latest
+release, so when a layer has a new version or a new region, and a weekly run
+that keeps everything releases nothing. The tag is the date in UTC, as
+`2026.11.03`, without a `v`, as the tags of Pyjoyment, with `.2` and on for
+another release of the same day, on the commit that the layers were built
+of, and the notes list the layers with new versions. The index of the latest
+release is at `releases/latest/download/layers.json`, so its format,
+`{layer: {region: arn}}`, which `jq` and `yq` read without a library, is a
+contract: a change of it breaks whoever reads it. A failed job of the
+publication releases nothing, as the index would miss its layers; the next
+run, which keeps what is published already, releases them all.
 
 The requests are signed with the credentials of the environment, which
 `Pyjo.AWS.SigV4` reads, not with a profile of AWS, so a run on a machine with
