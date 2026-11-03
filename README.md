@@ -1,4 +1,18 @@
+[![Home](https://img.shields.io/badge/%F0%9F%8F%A0-Pyjoyment-02a7a0)](https://github.com/pyjoyment/Pyjoyment)
+[![GitHub](https://img.shields.io/github/stars/pyjoyment/Pyjoyment-Lambda-Layers?style=flat&label=GitHub%20%E2%AD%90&logo=github)](https://github.com/pyjoyment/Pyjoyment-Lambda-Layers)
+[![License](https://img.shields.io/github/license/pyjoyment/Pyjoyment-Lambda-Layers.svg)](https://github.com/pyjoyment/Pyjoyment-Lambda-Layers/blob/main/LICENSE)
+[![Tests](https://github.com/pyjoyment/Pyjoyment-Lambda-Layers/actions/workflows/tests.yaml/badge.svg?branch=main)](https://github.com/pyjoyment/Pyjoyment-Lambda-Layers/actions/workflows/tests.yaml)
+[![Trunk Check](https://github.com/pyjoyment/Pyjoyment-Lambda-Layers/actions/workflows/trunk-check.yaml/badge.svg?branch=main)](https://github.com/pyjoyment/Pyjoyment-Lambda-Layers/actions/workflows/trunk-check.yaml)
+[![Publish](https://github.com/pyjoyment/Pyjoyment-Lambda-Layers/actions/workflows/publish.yaml/badge.svg?branch=main)](https://github.com/pyjoyment/Pyjoyment-Lambda-Layers/actions/workflows/publish.yaml)
+
 # Pyjoyment Lambda Layers
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/pyjoyment/Pyjoyment/main/Pyjoyment/resources/public/pyjo/logo-white-4x.png">
+    <img src="https://raw.githubusercontent.com/pyjoyment/Pyjoyment/main/Pyjoyment/resources/public/pyjo/logo-black-4x.png" alt="Pyjoyment" width="322">
+  </picture>
+</p>
 
 Public layers of AWS Lambda with Python and with
 [Pyjoyment](https://github.com/pyjoyment/Pyjoyment), for the event functions
