@@ -7,7 +7,7 @@ architectures = ["arm64", "x86_64"]
 
 # The runtimes of Python of AWS Lambda, which the layer of Pyjoyment of the same
 # version serves too, where Lambda takes them as CompatibleRuntimes
-runtimes = ["python3.12", "python3.13", "python3.14"]
+runtimes = ["python3.12", "python3.13", "python3.14", "python3.15"]
 
 # The regions of the account that the layers are not published in, as one that
 # does not answer
