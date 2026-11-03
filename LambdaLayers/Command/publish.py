@@ -14,6 +14,8 @@ LambdaLayers.Command.publish - Publish command
                                "x86_64", all of layers.toml by default
           --apply              Publish, where the command only shows what it
                                would do by default
+      -c, --concurrency <number>
+                               Regions at the same time, defaults to 4
       -h, --help               Show this summary of available options
       -p, --python <version>   Version of Python, as "3.14" or "3.14t", all of
                                layers.toml by default
@@ -28,8 +30,12 @@ With ``--apply``, it publishes the files that differ, makes the latest
 versions public, and writes the ARNs of the latest versions of each
 layer in its regions in ``dist``, as ``python3_14-arm64.json``.
 
-A region that fails, as one that does not answer, is shown as ``[error]``
-with its error, the others go on, and the command fails at its end.
+The regions of a layer are done at the same time, four of them by default,
+and shown in their order, as each is done, in the log of the application, on
+the standard error, at once, in the format of ``--log-format``, where
+``plain`` leaves out the time and the process that a log of CI adds itself. A
+region that fails, as one that does not answer, is logged as an error, the
+others go on, and the command fails at its end.
 
 The requests to the APIs of AWS are signed with :mod:`Pyjo.AWS.SigV4`, with
 the credentials of the environment.
@@ -73,7 +79,14 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
         Run this command.
         """
         arguments = list(args)
-        if not (opts := getopt(arguments, {'a|arch=s': None, 'apply': None, 'p|python=s': None})) or arguments:
+        if (
+            not (
+                opts := getopt(
+                    arguments, {'a|arch=s': None, 'apply': None, 'c|concurrency=i': None, 'p|python=s': None}
+                )
+            )
+            or arguments
+        ):
             raise Pyjo.Exception.new(self.usage)
         dist = self.app.home.child('dist')
         config = self.app.config()
@@ -82,13 +95,16 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
             if not os.path.isfile(dist.child(f'{name}.zip')):
                 raise Pyjo.Exception.new(f'No file of the layer {name} in dist, which the command build writes')
 
-        # A layer of Python goes to a region far away in one request
+        # A layer of Python goes to a region far away in one request of seconds, and a region that hangs or trickles
+        # fails after a minute or two, where a request of the user agent has no limit by default
         ua = self.app.ua
-        ua.inactivity_timeout = 300
+        ua.inactivity_timeout = 60
+        ua.request_timeout = 120
 
         # The identity of the credentials first, so that the log shows the account and the role that the run used
+        log = self.app.log
         caller = LambdaLayers.identity(ua, self.endpoint)
-        self._loud(f'  [identity] {caller["Account"]} {caller["Arn"]}')
+        log.info(f'[identity] {caller["Account"]} {caller["Arn"]}')
 
         excluded = config.get('excluded_regions', [])
         regions = [region for region in LambdaLayers.regions(ua, self.endpoint) if region not in excluded]
@@ -97,12 +113,13 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
             path = dist.child(f'{name}.zip')
             arns: dict[str, str | None] = {}
             for region, action, arn in LambdaLayers.publish(
-                ua, regions, name, params, path, bool(opts.apply), self.endpoint
+                ua, regions, name, params, path, bool(opts.apply), self.endpoint, opts.concurrency or 4
             ):
-                self._loud(f'  [{action}] {region} {name} {arn or ""}'.rstrip())
                 if action == 'error':
+                    log.error(f'[fail] {region} {name} {arn}')
                     failed.append(f'{region} {name}')
                 else:
+                    log.info(f'[{action}] {region} {name} {arn or ""}'.rstrip())
                     arns[region] = arn
             if opts.apply:
                 dist.child(f'{name}.json').spew(Pyjo.JSON.to_json(arns, sort_keys=True) + '\n')

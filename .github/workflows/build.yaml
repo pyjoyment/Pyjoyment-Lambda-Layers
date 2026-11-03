@@ -71,6 +71,10 @@ jobs:
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 15
 
+    env:
+      # The log of the commands without the time and the process, which the log of GitHub Actions has
+      PYJO_LOG_FORMAT: plain
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7

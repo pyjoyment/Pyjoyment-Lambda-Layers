@@ -73,7 +73,7 @@ jobs:
     environment: ${{ github.event_name != 'pull_request' && 'publishing' || '' }}
 
     runs-on: ubuntu-26.04-arm
-    timeout-minutes: 60
+    timeout-minutes: 20
 
     permissions:
       contents: read
@@ -81,6 +81,8 @@ jobs:
 
     env:
       APPLY: ${{ github.event_name != 'pull_request' && '1' || '' }}
+      # The log of the commands without the time and the process, which the log of GitHub Actions has
+      PYJO_LOG_FORMAT: plain
 
     steps:
       - name: Checkout

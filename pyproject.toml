@@ -18,7 +18,7 @@ package = false
 # machine, and whose Pyjo.Util has SHA-256; until then the commit of Git that has them, pinned, so that the layers have
 # no change that is not reviewed
 [tool.uv.sources]
-Pyjoyment = { git = "https://github.com/pyjoyment/Pyjoyment", rev = "86471ff3c08fede4dd5d95e63ba222f186bc16eb" }
+Pyjoyment = { git = "https://github.com/pyjoyment/Pyjoyment", rev = "04f6a55fb4ddd7f9bcfe51ea6e46b88686aa1e75" }
 
 [tool.ruff]
 line-length = 120

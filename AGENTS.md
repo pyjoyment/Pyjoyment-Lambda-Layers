@@ -65,6 +65,23 @@ answers 409 for a version that is public already, and writes the ARNs of the
 latest versions in `dist`. A run is started by hand or on a schedule, not on a
 push, and a run that failed is run again.
 
+The regions of a layer are done at the same time, four of them by default, as
+`--concurrency` says, with the requests of `Pyjo.UserAgent` that give promises,
+in the coroutine of a region, which `Pyjo.Iterator.map` runs ahead, so that
+the regions come out in their order as they are done. A layer of Python of 17
+MB to more than thirty regions one after another takes minutes, and a region
+that answers slowly holds back only one of the four.
+A request has 120 seconds at most and 60 without data, so a region that hangs
+or trickles fails after a minute or two, as `[fail]`, and the job of the
+workflow has 20 minutes, where the user agent has no limit by default.
+
+The commands report what they do in the log of the application, on the
+standard error, which `Pyjo.Log` flushes at each message, and not with
+`_loud` of `Pyjoyment.Command`, a private method of the framework; the
+standard output is for the result of a command, as the JSON of `matrix`. The
+workflows set `PYJO_LOG_FORMAT=plain`, without the time and the process, which
+the log of GitHub Actions has itself.
+
 The workflow Publish runs `build` and `publish` in a job for each version of
 Python and architecture of the matrix. A pull request runs them without
 `--apply`, with the role that only reads, so that it shows what it would
