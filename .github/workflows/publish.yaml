@@ -124,7 +124,9 @@ jobs:
           retention-days: 90
 
   # The ARNs of the latest versions of every layer in every region, as one
-  # index, {layer: {region: arn}}
+  # index, {layer: {region: arn}}, released when it differs from the one of
+  # the latest release, with a tag of the date, so that
+  # releases/latest/download/layers.json is the index of the layers
   index:
     name: Index
 
@@ -134,7 +136,26 @@ jobs:
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 10
 
+    permissions:
+      contents: write
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # The log of the commands without the time and the process, which the log of GitHub Actions has
+      PYJO_LOG_FORMAT: plain
+
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up mise
+        uses: jdx/mise-action@v5
+        with:
+          version: 2026.10.25 # datasource=github-releases depName=jdx/mise
+
+      - name: Install
+        run: uv sync
+
       - name: Download the ARNs
         uses: actions/download-artifact@v8
         with:
@@ -142,16 +163,17 @@ jobs:
           merge-multiple: true
           path: arns
 
+      - name: Index of the latest release
+        run: |
+          if ! gh release download --repo "$GITHUB_REPOSITORY" --pattern layers.json --output latest.json; then
+            echo '{}' > latest.json
+          fi
+
+      # notes.md only when the layers have new versions or new regions
       - name: Index of the layers
         run: |
-          for file in arns/*.json; do
-            jq --arg name "$(basename "$file" .json)" '{($name): .}' "$file"
-          done | jq -s 'add' > layers.json
-          {
-            echo '```json'
-            cat layers.json
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          uv run python layers.py index --latest latest.json --notes notes.md arns
+          cat notes.md >> "$GITHUB_STEP_SUMMARY" 2> /dev/null || echo 'The layers of the latest release.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the index
         uses: actions/upload-artifact@v7
@@ -160,3 +182,19 @@ jobs:
           path: layers.json
           if-no-files-found: error
           retention-days: 90
+
+      # The tag of the date, with a number of the day for another release of
+      # the same day
+      - name: Release
+        run: |
+          if [[ ! -f notes.md ]]; then
+            exit 0
+          fi
+          day=$(date -u +%Y.%m.%d)
+          tag=$day
+          number=1
+          while gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; do
+            number=$((number + 1))
+            tag="$day.$number"
+          done
+          gh release create "$tag" layers.json --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$tag" --notes-file notes.md

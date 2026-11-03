@@ -20,6 +20,7 @@ so the build of each architecture writes it, and the first architecture of
 import Pyjo.Exception
 import Pyjo.File
 import Pyjo.Iterator
+import Pyjo.JSON
 import Pyjo.Parameters
 import Pyjo.Promise
 import Pyjo.Transaction.HTTP
@@ -217,6 +218,27 @@ def publish(
     # The values of the coroutines, which map passes on, where its type has the coroutines themselves
     results: Any = Pyjo.Iterator.new(regions).map(region_p, concurrency=concurrency)
     return results
+
+
+def index(arns: Pyjo.File.object) -> dict[str, dict[str, str]]:
+    """The index of the layers, {layer: {region: arn}}, of the files of the ARNs that publish writes in a directory,
+    as python3_14-arm64.json."""
+    return {
+        file.basename('.json'): Pyjo.JSON.decode_json(cast(bytes, file.slurp()))
+        for file in arns.list()
+        if file.extname == 'json'
+    }
+
+
+def new_versions(index: dict[str, dict[str, str]], latest: dict[str, dict[str, str]]) -> dict[str, list[int]]:
+    """The layers of an index that have versions which the latest index has not, as a new version or a new region,
+    and these versions."""
+    result: dict[str, list[int]] = {}
+    for layer, arns in sorted(index.items()):
+        known = latest.get(layer, {})
+        if versions := sorted({int(arn.rsplit(':', 1)[1]) for region, arn in arns.items() if known.get(region) != arn}):
+            result[layer] = versions
+    return result
 
 
 # A request built and signed in the event start of the user agent, where it has its URL, of the application of a test

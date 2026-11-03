@@ -1,4 +1,5 @@
 import LambdaLayers
+import LambdaLayers.Command.index
 import LambdaLayers.Command.publish
 import Pyjo.File
 import Pyjo.Server
@@ -299,6 +300,50 @@ with subtest('Concurrency'):
     with app.log.capture('info') as messages:
         publish.run('--python', '3.14', '--arch', config['architectures'][0], '-c', '1')
     is_ok(len(messages), 5, 'one region at a time')
+
+with subtest('Index'):
+    tmp = Pyjo.File.tempdir()
+    arns = tmp.child('arns').make_path()
+    account = 'arn:aws:lambda:{}:959435416781:layer:{}:{}'
+    arns.child(f'{python}.json').spew(f'{{"us-east-1":"{account.format("us-east-1", python, 1)}"}}')
+    arns.child(f'{layer}.json').spew(
+        f'{{"us-east-1":"{account.format("us-east-1", layer, 2)}",'
+        f'"eu-central-1":"{account.format("eu-central-1", layer, 2)}"}}'
+    )
+    arns.child('readme.txt').spew('not an ARN')
+    index = LambdaLayers.Command.index.new()
+    index.app = app
+    output, notes, latest = tmp.child('layers.json'), tmp.child('notes.md'), tmp.child('latest.json')
+    with app.log.capture('info') as messages:
+        index.run('-o', output.to_str(), arns.to_str())
+    is_ok(
+        output.slurp().decode(),
+        f'{{"{layer}":{{"eu-central-1":"{account.format("eu-central-1", layer, 2)}",'
+        f'"us-east-1":"{account.format("us-east-1", layer, 2)}"}},'
+        f'"{python}":{{"us-east-1":"{account.format("us-east-1", python, 1)}"}}}}\n',
+        'index with its keys sorted',
+    )
+    is_ok([m.rstrip('\n') for m in messages], [f'[info] [write] {output}'], 'written')
+
+    latest.spew('{}')
+    index.run('-o', output.to_str(), '-l', latest.to_str(), '-n', notes.to_str(), arns.to_str())
+    is_ok(
+        notes.slurp().decode(),
+        f'The layers with new versions:\n\n- `{layer}`: version 2\n- `{python}`: version 1\n',
+        'notes of the first release',
+    )
+
+    notes.remove()
+    output.copy_to(latest)
+    with app.log.capture('info') as messages:
+        index.run('-o', output.to_str(), '-l', latest.to_str(), '-n', notes.to_str(), arns.to_str())
+    ok(not os.path.exists(notes), 'no release of the same layers')
+    is_ok(messages[-1].rstrip('\n'), '[info] [same] the layers of the latest release', 'the same layers')
+
+    arns.child(f'{layer}.json').spew(f'{{"us-east-1":"{account.format("us-east-1", layer, 3)}"}}')
+    index.run('-o', output.to_str(), '-l', latest.to_str(), '-n', notes.to_str(), arns.to_str())
+    is_ok(notes.slurp().decode(), f'The layers with new versions:\n\n- `{layer}`: version 3\n', 'a new version')
+    throws_ok(lambda: index.run(), re.compile(r'^Usage: APPLICATION index'), 'usage without a directory')
 
 with subtest('Errors'):
     throws_ok(
