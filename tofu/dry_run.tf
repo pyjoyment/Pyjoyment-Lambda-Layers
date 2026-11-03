@@ -1,4 +1,5 @@
-# Assumed by the jobs of the pull requests of the repository, which show what the publication would do
+# Assumed by the jobs of the pull requests of the repository and of a dispatch on main in the mode dry-run, which show
+# what the publication would do
 data "aws_iam_policy_document" "dry_run_trust" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -17,7 +18,7 @@ data "aws_iam_policy_document" "dry_run_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["${local.subject}:pull_request"]
+      values   = ["${local.subject}:pull_request", "${local.subject}:ref:refs/heads/main"]
     }
   }
 }
