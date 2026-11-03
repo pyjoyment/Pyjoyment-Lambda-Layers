@@ -195,7 +195,12 @@ dist.child(f'{python}.zip').spew(b'python')
 dist.child(f'{layer}.zip').spew(b'pyjoyment')
 arn = f'arn:aws:lambda:us-east-1:959435416781:layer:{layer}'
 versions[('us-east-1', layer)] = [
-    {'Version': 2, 'LayerVersionArn': f'{arn}:2', 'Content': {'CodeSha256': digest(b'pyjoyment')}},
+    {
+        'Version': 2,
+        'LayerVersionArn': f'{arn}:2',
+        'Content': {'CodeSha256': digest(b'pyjoyment')},
+        **LambdaLayers.publications(config, '3.14', config['architectures'][0])[1][1],
+    },
     {'Version': 1, 'LayerVersionArn': f'{arn}:1', 'Content': {'CodeSha256': digest(b'older')}},
 ]
 
@@ -267,6 +272,17 @@ with subtest('Apply'):
     )
     lines = logged('--python', '3.14', '--arch', config['architectures'][0], '--apply')
     is_ok([line.split()[1] for line in lines[1:]], ['[keep]'] * 4, 'nothing more to publish, already public')
+
+with subtest('Parameters'):
+    kept = versions[('us-east-1', layer)][0]
+    runtimes = kept['CompatibleRuntimes']
+    kept['CompatibleRuntimes'] = list(reversed(runtimes))
+    lines = logged('--python', '3.14', '--arch', config['architectures'][0])
+    is_ok(lines[-1], f'[info] [keep] us-east-1 {layer} {arn}:2', 'the same runtimes in another order')
+    kept['CompatibleRuntimes'] = ['provided.al2023']
+    lines = logged('--python', '3.14', '--arch', config['architectures'][0])
+    is_ok(lines[-1], f'[info] [would publish] us-east-1 {layer}', 'the same content with other runtimes')
+    kept['CompatibleRuntimes'] = runtimes
 
 with subtest('Excluded region'):
     config['excluded_regions'] = ['eu-central-1']

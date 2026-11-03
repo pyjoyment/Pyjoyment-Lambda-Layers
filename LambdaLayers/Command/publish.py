@@ -25,7 +25,8 @@ credentials first, of ``GetCallerIdentity`` of STS, so that the log tells
 where a run went, and compares the files of ``dist``, which
 :mod:`LambdaLayers.Command.build` writes, with the latest versions of their
 layers in every region that the account has enabled, but the
-``excluded_regions`` of ``layers.toml``, and shows what it would publish.
+``excluded_regions`` of ``layers.toml``, by their content and their
+parameters, as the compatible runtimes, and shows what it would publish.
 With ``--apply``, it publishes the files that differ, makes the latest
 versions public, and writes the ARNs of the latest versions of each
 layer in its regions in ``dist``, as ``python3_14-arm64.json``.

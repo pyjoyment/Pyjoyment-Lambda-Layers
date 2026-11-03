@@ -57,14 +57,17 @@ at the same time.
 `publish` takes the regions that the account has enabled from
 `account:ListRegions`, and compares the `CodeSha256` of the latest version of
 each layer in each of them, the highest version of `ListLayerVersions`, with
-the SHA-256 of its file. It only shows what it would publish, unless
-`--apply` is given, which only the workflow of the publication gives, so that
-a run anywhere else changes nothing. With `--apply`, it publishes the files
-that differ and makes the latest versions public, also a version that an
-earlier run published and did not make public, as `AddLayerVersionPermission`
-answers 409 for a version that is public already, and writes the ARNs of the
-latest versions in `dist`. A run is started by hand or on a schedule, not on a
-push, and a run that failed is run again.
+the SHA-256 of its file, and its parameters, as the description and the
+compatible runtimes, with those of the publication, with their lists in any
+order, so that a runtime of Python that `layers.toml` adds publishes the same
+file again. It only shows what it would publish, unless `--apply` is given,
+which only the workflow of the publication gives, so that a run anywhere else
+changes nothing. With `--apply`, it publishes the files that differ and makes
+the latest versions public, also a version that an earlier run published and
+did not make public, as `AddLayerVersionPermission` answers 409 for a version
+that is public already, and writes the ARNs of the latest versions in `dist`.
+A run is started by hand or on a schedule, not on a push, and a run that
+failed is run again.
 
 The regions of a layer are done at the same time, four of them by default, as
 `--concurrency` says, with the requests of `Pyjo.UserAgent` that give promises,
