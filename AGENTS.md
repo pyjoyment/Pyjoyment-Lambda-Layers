@@ -17,13 +17,25 @@ The names are predictable, as a user writes them in an ARN, and have only
 - `python<major>_<minor>[t]-<arch>`: `python.zip` of `generate lambda-zip`,
   Python of python-build-standalone for one architecture, for
   `provided.al2023`.
-- `pyjoyment-python<major>_<minor>[t]`: `pyjoyment.zip`, Pyjoyment and
-  Pyjo-AWS in `python/lib/python3.X/site-packages`, whose path and bytecode are of one
+- `pyjoyment-<major>_<minor>_<patch>-python<major>_<minor>[t]`:
+  `pyjoyment.zip`, Pyjoyment and Pyjo-AWS in
+  `python/lib/python3.X/site-packages`, whose path and bytecode are of one
   version of Python but of no architecture, for `provided.al2023` and the
   runtime of Python of AWS Lambda of the same version.
 
 A version of a layer is never deleted, as a function pins the ARN of a
 version, and a deleted one cannot be added to a function again.
+
+The layer of Pyjoyment has the version of Pyjoyment in its name, with `_` for
+the characters that Lambda does not take, as the dots, so that a function of
+`generate lambda-zip --function-only`, which tells the version of Pyjoyment
+that it was built with, takes the layer of that version by its name: the
+number of a version of a layer tells nothing, and the description of a layer
+is not in its ARN. The version of Pyjo-AWS is in the description only, so its
+bump is a new version of the same layer. A release of Pyjoyment gives new
+layers, and those of the previous version get no new versions after it, not
+even of a fix of the build. The layers `pyjoyment-python3_*` of AWS, without
+the version, are of the releases before it, and stay at their last versions.
 
 The command line of Pyjoyment builds the files, `generate lambda-zip`, whose
 files of the same input are the same. The build of Python is the one that the
@@ -114,18 +126,38 @@ writes the notes of a release, with the new versions, only when the index
 differs from the one of the latest release. A pull request of a fork has no
 role to assume, so it has no dry run.
 
+The index has the layers of the run only, not those of the releases before
+it, so that its size is the same for every version of Pyjoyment, and the
+alias of each layer of Pyjoyment, its name without the version of Pyjoyment,
+as `pyjoyment-python3_14` of `pyjoyment-0_3_0-python3_14`, with the same
+ARNs, for whoever takes the latest Pyjoyment, as the examples of Pyjoyment. No
+layer of AWS is published under the name of an alias. The notes list the new
+versions without the aliases, which would list each layer of Pyjoyment twice.
+
 The index is released when `index` writes the notes, so when a layer has a
 new version or a new region, and a weekly run that keeps everything releases
 nothing; `gh` downloads the index of the latest release and makes the
-release. The tag is the date in UTC, as
-`2026.11.03`, without a `v`, as the tags of Pyjoyment, with `.2` and on for
-another release of the same day, on the commit that the layers were built
-of, and the notes list the layers with new versions. The index of the latest
-release is at `releases/latest/download/layers.json`, so its format,
-`{layer: {region: arn}}`, which `jq` and `yq` read without a library, is a
-contract: a change of it breaks whoever reads it. A failed job of the
-publication releases nothing, as the index would miss its layers; the next
-run, which keeps what is published already, releases them all.
+release. The tag is the version of Pyjoyment of the layers and the date in
+UTC, as `0.3.0+2026.11.05`, without a `v`, as the tags of Pyjoyment, with
+`.2` and on for another release of the same day, on the commit that the
+layers were built of, and the notes list the layers with new versions. The
+date is the build metadata of semantic versioning, which its precedence leaves
+out, so the tag is not a pre-release of `0.3.0`, as `0.3.0-2026.11.05` would
+be. The releases of a version of Pyjoyment are those of the tags of its
+prefix, `0.3.0+`, and the latest of them has the layers of that version: GitHub
+has no latest release of a prefix, so it is the first of `gh release list`
+whose tag has it. The tags of the releases before the versioned layers are the
+date alone, as `2026.11.03`.
+
+The index of the latest release is at
+`releases/latest/download/layers.json`, so its format,
+`{layer: {region: arn}}`, which `jq` and `yq` read without a library, and the
+alias are a contract: a change of them breaks whoever reads it. `gh release
+create` marks the release as the latest one with `--latest`, which GitHub
+otherwise takes from the date and the highest semantic version, as
+`2026.11.05` of the tags of the date alone. A failed job of the publication
+releases nothing, as the index would miss its layers; the next run, which
+keeps what is published already, releases them all.
 
 The APIs of AWS are called with `Pyjo.AWS.Client` of Pyjo-AWS, with the
 credentials that the AWS CLI finds, of the environment first, which
