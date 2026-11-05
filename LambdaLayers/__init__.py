@@ -12,40 +12,47 @@ and of the architectures of ``layers.toml``, for the commands of
 ``layers.py``, :mod:`LambdaLayers.Command.build`,
 :mod:`LambdaLayers.Command.matrix` and :mod:`LambdaLayers.Command.publish`:
 ``python3_14-arm64``, Python for one architecture, and
-``pyjoyment-python3_14``, Pyjoyment for both, which is the same file for both,
-so the build of each architecture writes it, and the first architecture of
-``layers.toml`` publishes it.
+``pyjoyment-python3_14``, Pyjoyment and Pyjo-AWS for both, which is the same
+file for both, so the build of each architecture writes it, and the first
+architecture of ``layers.toml`` publishes it.
+
+The APIs of AWS are called with the clients of :mod:`Pyjo.AWS.Client`, of
+:func:`clients`.
 """
 
+import Pyjo.AWS.Client
+import Pyjo.AWS.Config
+import Pyjo.AWS.Credentials.Chain
+import Pyjo.AWS.Error
+import Pyjo.AWS.Protocol.Query
+import Pyjo.AWS.Protocol.RestJSON
+import Pyjo.DOM
 import Pyjo.Exception
 import Pyjo.File
 import Pyjo.Iterator
 import Pyjo.JSON
-import Pyjo.Parameters
-import Pyjo.Promise
-import Pyjo.Transaction.HTTP
 import Pyjo.UserAgent
 
 from Pyjo.Util import b64_encode, sha256_bytes
 
-import importlib
 import importlib.metadata
 import subprocess
 import sys
+import zipfile
 
+from collections.abc import Callable
 from typing import Any, cast
 
 
-# pyright takes the regular package Pyjo of Pyjoyment in .venv, which hides Pyjo.AWS of the checkout that extend_path
-# finds at run time, so the module comes from importlib
-SigV4: Any = importlib.import_module('Pyjo.AWS.SigV4')
-
-# The URL of the APIs of AWS, which a test serves itself
-ENDPOINT = 'https://{service}.{region}.amazonaws.com'
-
 LAYERS = '/2018-10-31/layers'
 
+# The packages of the distributions that the layer of Pyjoyment has besides Pyjoyment, which generate lambda-zip moves
+# there with the namespace Pyjo, and which a generator that moves less would leave in function.zip
+LAYERED = ('Pyjo/AWS',)
+
 type Config = dict[str, Any]
+
+type Clients = Callable[[str, str], Pyjo.AWS.Client.object]
 
 
 def python_layer(python: str, arch: str) -> str:
@@ -78,7 +85,16 @@ def build(home: Pyjo.File.object, python: str, arch: str, dist: Pyjo.File.object
         paths = [dist.child(f'{layer}.zip') for layer in files.values()]
         for name, path in zip(files, paths, strict=True):
             tmp.child('dist', name).move_to(path)
+    if packages := missing(paths[1]):
+        raise Pyjo.Exception.new(f'No {", ".join(packages)} in the layer of Pyjoyment {paths[1]}')
     return paths
+
+
+def missing(path: Pyjo.File.object) -> list[str]:
+    """The packages of LAYERED that a ZIP file of the layer of Pyjoyment has not in its site-packages."""
+    with zipfile.ZipFile(path) as file:
+        names = file.namelist()
+    return [p for p in LAYERED if not any(n.endswith(f'/site-packages/{p}/__init__.py') for n in names)]
 
 
 def publications(config: Config, python: str | None, arch: str | None) -> list[tuple[str, dict[str, Any]]]:
@@ -96,8 +112,9 @@ def publications(config: Config, python: str | None, arch: str | None) -> list[t
             result.append((python_layer(version, architecture), params))
             if architecture == config['architectures'][0]:
                 runtime = f'python{version}'
+                pyjoyment, aws = importlib.metadata.version('Pyjoyment'), importlib.metadata.version('Pyjo-AWS')
                 params = {
-                    'Description': f'Pyjoyment {importlib.metadata.version("Pyjoyment")} for Python {version}',
+                    'Description': f'Pyjoyment {pyjoyment} and Pyjo-AWS {aws} for Python {version}',
                     'CompatibleRuntimes': ['provided.al2023', *([runtime] if runtime in config['runtimes'] else [])],
                     'CompatibleArchitectures': config['architectures'],
                     'LicenseInfo': 'Artistic-2.0',
@@ -106,112 +123,102 @@ def publications(config: Config, python: str | None, arch: str | None) -> list[t
     return result
 
 
-def aws(
-    ua: Pyjo.UserAgent.object,
-    method: str,
-    service: str,
-    region: str,
-    path: str,
-    body: dict[str, Any] | None = None,
-    endpoint: str = ENDPOINT,
-    allow: tuple[int, ...] = (),
-    form: dict[str, str] | None = None,
-) -> tuple[int, Any]:
-    """A request to an API of AWS, signed, with a body of JSON or of a form, and the status and the JSON of its
-    response."""
-    tx = _signed(ua, method, service, region, endpoint.format(service=service, region=region) + path, body, form)
-    return _result(ua.start(tx), allow)
+def clients(ua: Pyjo.UserAgent.object, endpoint: str | None = None) -> Clients:
+    """The clients of the services in the regions, as aws('lambda', 'eu-central-1'), which share one configuration and
+    one chain of credentials, so that those of a profile of SSO are read or refreshed once, and the user agent, with its
+    timeouts. The endpoint is the one of the environment or of the profile, or the regional one, or one with the
+    placeholders service and region, which a test serves itself."""
+    config = Pyjo.AWS.Config.new()
+    credentials = Pyjo.AWS.Credentials.Chain.new(config=config, ua=ua)
+
+    def client(service: str, region: str) -> Pyjo.AWS.Client.object:
+        url = endpoint.format(service=service, region=region) if endpoint else None
+        return Pyjo.AWS.Client.new(
+            service=service, region=region, endpoint=url, config=config, credentials=credentials, ua=ua
+        )
+
+    return client
 
 
-def aws_p(
-    ua: Pyjo.UserAgent.object,
-    method: str,
-    service: str,
-    region: str,
-    path: str,
-    body: dict[str, Any] | None = None,
-    endpoint: str = ENDPOINT,
-    allow: tuple[int, ...] = (),
-) -> Pyjo.Promise.object:
-    """Same as aws, but non-blocking, and a promise of the status and the JSON of the response."""
-    tx = _signed(ua, method, service, region, endpoint.format(service=service, region=region) + path, body, None)
-
-    def result(tx: Pyjo.Transaction.HTTP.object) -> tuple[int, Any]:
-        return _result(tx, allow)
-
-    return ua.start_p(tx).then(result)
-
-
-def identity(ua: Pyjo.UserAgent.object, endpoint: str = ENDPOINT) -> dict[str, str]:
+def identity(aws: Clients) -> dict[str, str]:
     """The account and the ARN of the credentials, of GetCallerIdentity of STS, which every identity may call."""
-    form = {'Action': 'GetCallerIdentity', 'Version': '2011-06-15'}
-    _, data = aws(ua, 'POST', 'sts', 'us-east-1', '/', None, endpoint, form=form)
-    return data['GetCallerIdentityResponse']['GetCallerIdentityResult']
+    dom = aws('sts', 'us-east-1').call(Pyjo.AWS.Protocol.Query.new('GetCallerIdentity', version='2011-06-15'))
+    return {name: _text(dom, f'GetCallerIdentityResult > {name}') for name in ('Account', 'Arn', 'UserId')}
 
 
-def regions(ua: Pyjo.UserAgent.object, endpoint: str = ENDPOINT) -> list[str]:
+def regions(aws: Clients) -> list[str]:
     """The regions that the account has enabled."""
+    client = aws('account', 'us-east-1')
     names: list[str] = []
     body: dict[str, Any] = {'RegionOptStatusContains': ['ENABLED', 'ENABLED_BY_DEFAULT'], 'MaxResults': 50}
     while True:
-        _, data = aws(ua, 'POST', 'account', 'us-east-1', '/listRegions', body, endpoint)
+        data = client.call(Pyjo.AWS.Protocol.RestJSON.new('POST', '/listRegions', body))
         names.extend(region['RegionName'] for region in data['Regions'])
         if not (token := data.get('NextToken')):
             return sorted(names)
         body['NextToken'] = token
 
 
-async def latest(ua: Pyjo.UserAgent.object, region: str, name: str, endpoint: str = ENDPOINT) -> dict[str, Any] | None:
+async def latest(aws: Clients, region: str, name: str) -> dict[str, Any] | None:
     """The latest version of a layer in a region, or None."""
-    version, marker = 0, ''
+    client = aws('lambda', region)
+    version, marker = 0, None
     while True:
-        query = Pyjo.Parameters.new({'MaxItems': 50, **({'Marker': marker} if marker else {})}).to_str()
-        path = f'{LAYERS}/{name}/versions?{query}'
-        code, data = await aws_p(ua, 'GET', 'lambda', region, path, None, endpoint, (404,))
-        if code == 404:
-            return None
+        call = Pyjo.AWS.Protocol.RestJSON.new(
+            'GET', f'{LAYERS}/{name}/versions', query={'MaxItems': 50, 'Marker': marker}
+        )
+        try:
+            data = await client.call_p(call)
+        except Pyjo.AWS.Error.object as e:
+            if e.status == 404:
+                return None
+            raise
         version = max([version, *(v['Version'] for v in data['LayerVersions'])])
         if not (marker := data.get('NextMarker')):
             break
     if not version:
         return None
-    return (await aws_p(ua, 'GET', 'lambda', region, f'{LAYERS}/{name}/versions/{version}', None, endpoint))[1]
+    return await client.call_p(Pyjo.AWS.Protocol.RestJSON.new('GET', f'{LAYERS}/{name}/versions/{version}'))
 
 
 def publish(
-    ua: Pyjo.UserAgent.object,
+    aws: Clients,
     regions: list[str],
     name: str,
     params: dict[str, Any],
     path: Pyjo.File.object,
     apply: bool = False,
-    endpoint: str = ENDPOINT,
     concurrency: int = 4,
 ) -> Pyjo.Iterator.Pyjo_Iterator[tuple[str, str, str | None]]:
     """Publish a layer in the regions where the latest version differs, only with apply, and make its latest
     versions public: the region, what is done there, and the ARN of the latest version, or the error of a region
     that fails, which leaves the others to go on, in the order of the regions, as many of them at the same time as
     the concurrency."""
-    content = cast(bytes, path.slurp())
+    content = path.slurp()
     digest = b64_encode(sha256_bytes(content), '')
 
     async def region_p(region: str) -> tuple[str, str, str | None]:
         try:
-            current = await latest(ua, region, name, endpoint)
+            client = aws('lambda', region)
+            current = await latest(aws, region, name)
             # The same content, with the same parameters, as the runtimes of a newer configuration
             if current is not None and current['Content']['CodeSha256'] == digest and _same(current, params):
                 action = 'keep'
             elif apply:
                 action = 'publish'
                 body = {**params, 'Content': {'ZipFile': b64_encode(content, '')}}
-                current = (await aws_p(ua, 'POST', 'lambda', region, f'{LAYERS}/{name}/versions', body, endpoint))[1]
+                current = await client.call_p(Pyjo.AWS.Protocol.RestJSON.new('POST', f'{LAYERS}/{name}/versions', body))
             else:
                 action, current = 'would publish', None
             # Public, also a version that an earlier run published and did not make public, which 409 says it is
             if apply and current is not None:
                 policy = {'StatementId': 'public', 'Action': 'lambda:GetLayerVersion', 'Principal': '*'}
                 resource = f'{LAYERS}/{name}/versions/{current["Version"]}/policy'
-                await aws_p(ua, 'POST', 'lambda', region, resource, policy, endpoint, (409,))
+                try:
+                    await client.call_p(Pyjo.AWS.Protocol.RestJSON.new('POST', resource, policy))
+                except Pyjo.AWS.Error.object as e:
+                    if e.status != 409:
+                        raise
         except Exception as e:
             return region, 'error', _message(e)
         return region, action, current['LayerVersionArn'] if current is not None else None
@@ -234,9 +241,7 @@ def index(arns: Pyjo.File.object) -> dict[str, dict[str, str]]:
     """The index of the layers, {layer: {region: arn}}, of the files of the ARNs that publish writes in a directory,
     as python3_14-arm64.json."""
     return {
-        file.basename('.json'): Pyjo.JSON.decode_json(cast(bytes, file.slurp()))
-        for file in arns.list()
-        if file.extname == 'json'
+        file.basename('.json'): Pyjo.JSON.decode_json(file.slurp()) for file in arns.list() if file.extname == 'json'
     }
 
 
@@ -251,49 +256,13 @@ def new_versions(index: dict[str, dict[str, str]], latest: dict[str, dict[str, s
     return result
 
 
-# A request built and signed in the event start of the user agent, where it has its URL, of the application of a test
-# too, and its Host; only the transaction of the request, as several of them start at the same time
-def _signed(
-    ua: Pyjo.UserAgent.object,
-    method: str,
-    service: str,
-    region: str,
-    url: str,
-    body: dict[str, Any] | None,
-    form: dict[str, str] | None,
-) -> Pyjo.Transaction.HTTP.object:
-    if form is not None:
-        tx = ua.build_tx(method, url, {'Accept': 'application/json'}, form=form)
-    elif body is not None:
-        tx = ua.build_tx(method, url, json=body)
-    else:
-        tx = ua.build_tx(method, url)
-    signer: Any = SigV4.new(service=service, region=region)
-
-    def sign(ua: Pyjo.UserAgent.object, started: Pyjo.Transaction.HTTP.object) -> None:
-        if started is tx:
-            ua.unsubscribe('start', sign)
-            signer.sign(started.req)
-
-    ua.on('start', sign)
-    return tx
+# The text of an element of the XML of a response, which AWS always has
+def _text(dom: Pyjo.DOM.object, selector: str) -> str:
+    if (element := dom.at(selector)) is None:
+        raise Pyjo.Exception.new(f'No {selector} in the response of AWS')
+    return element.text
 
 
-# The status and the JSON of a response, or the error of AWS or of the connection
-def _result(tx: Pyjo.Transaction.HTTP.object, allow: tuple[int, ...]) -> tuple[int, Any]:
-    req, res = tx.req, tx.res
-    method, url = req.method, req.url.to_str()
-    if (code := res.code) is None:
-        raise Pyjo.Exception.new(f'{method} {url}: {tx.error["message"] if tx.error else "no response"}')
-    data: Any = res.json() if res.body else None
-    if code >= 300 and code not in allow:
-        error = (res.headers.header('X-Amzn-ErrorType') or '').split(':')[0]
-        fields = cast(dict[str, Any], data) if isinstance(data, dict) else {}
-        message = fields.get('message') or fields.get('Message') or res.body.decode(errors='replace')
-        raise Pyjo.Exception.new(f'{method} {url}: {code} {error}: {message}')
-    return code, data
-
-
-# The message of an error of a region, of Pyjo.Exception or of a promise rejected with a string
+# The message of an error of a region, of Pyjo.AWS.Error, of Pyjo.Exception or of a promise rejected with a string
 def _message(e: BaseException) -> str:
     return (e.message if isinstance(e, Pyjo.Exception.object) else str(e)).strip()

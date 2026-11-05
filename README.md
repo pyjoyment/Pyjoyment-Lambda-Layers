@@ -22,9 +22,10 @@ them in its ZIP file.
 - `python3_14-arm64`, `python3_14t-x86_64`, ...: Python, for the custom
   runtime `provided.al2023`, of one version and one architecture, the
   free-threaded build too.
-- `pyjoyment-python3_14`, `pyjoyment-python3_14t`, ...: Pyjoyment, for both
-  architectures, with the layer of Python on `provided.al2023` or on the
-  runtime of Python of AWS Lambda of the same version.
+- `pyjoyment-python3_14`, `pyjoyment-python3_14t`, ...: Pyjoyment and
+  [Pyjo-AWS](https://github.com/pyjoyment/Pyjo-AWS), for both architectures,
+  with the layer of Python on `provided.al2023` or on the runtime of Python of
+  AWS Lambda of the same version.
 
 The layers are published by the account `959435416781` in the commercial
 regions of AWS, as
@@ -59,5 +60,5 @@ on the layers of a day.
 
 ## License
 
-Artistic License 2.0 for Pyjoyment and this repository, and the license of the
+Artistic License 2.0 for Pyjoyment, Pyjo-AWS and this repository, and the license of the
 Python Software Foundation for Python.

@@ -16,9 +16,10 @@ LambdaLayers.Command.build - Build command
                                layers.toml by default
 
 :mod:`LambdaLayers.Command.build` builds the layers in ``dist``, with
-``generate lambda-zip`` of Pyjoyment and the Pyjoyment of ``uv.lock``, as
-``python3_14-arm64.zip`` and ``pyjoyment-python3_14.zip``, which it logs in the
-log of the application.
+``generate lambda-zip`` of Pyjoyment and the Pyjoyment and Pyjo-AWS of
+``uv.lock``, as ``python3_14-arm64.zip`` and ``pyjoyment-python3_14.zip``,
+which it logs in the log of the application. It fails if the layer of
+Pyjoyment has no Pyjo-AWS.
 """
 
 import LambdaLayers

@@ -1,6 +1,7 @@
 import LambdaLayers
 import LambdaLayers.Command.index
 import LambdaLayers.Command.publish
+import Pyjo.AWS.Protocol.RestJSON
 import Pyjo.File
 import Pyjo.Server
 import Pyjoyment
@@ -12,6 +13,7 @@ import contextlib
 import io
 import os
 import re
+import zipfile
 
 
 # The commands of layers.py, with the APIs of AWS of an application of the test
@@ -74,8 +76,8 @@ with subtest('Publications'):
     )
     like_ok(
         LambdaLayers.publications(config, '3.14', first)[1][1]['Description'],
-        re.compile(r'^Pyjoyment \S+ for Python 3\.14$'),
-        'version of Pyjoyment',
+        re.compile(r'^Pyjoyment \S+ and Pyjo-AWS \S+ for Python 3\.14$'),
+        'versions of Pyjoyment and Pyjo-AWS',
     )
     is_ok([name for name, _ in LambdaLayers.publications(config, '3.14', second)], ['python3_14-' + second], 'second')
     is_ok(
@@ -88,6 +90,18 @@ with subtest('Publications'):
         len(config['python']) * (len(config['architectures']) + 1),
         'all of them',
     )
+
+with subtest('Packages of the layer of Pyjoyment'):
+    tmp = Pyjo.File.tempdir()
+    site = 'python/lib/python3.14/site-packages'
+    with zipfile.ZipFile(tmp.child('layer.zip'), 'w') as file:
+        file.writestr(f'{site}/Pyjo/__init__.py', '')
+        file.writestr(f'{site}/Pyjo/AWS/__init__.py', '')
+    is_ok(LambdaLayers.missing(tmp.child('layer.zip')), [], 'with Pyjo-AWS')
+    with zipfile.ZipFile(tmp.child('without.zip'), 'w') as file:
+        file.writestr(f'{site}/Pyjo/__init__.py', '')
+        file.writestr('Pyjo/AWS/__init__.py', '')
+    is_ok(LambdaLayers.missing(tmp.child('without.zip')), ['Pyjo/AWS'], 'without Pyjo-AWS in site-packages')
 
 with subtest('Usage'):
     for args in (('build', '--unknown'), ('build', 'extra'), ('publish', '--unknown'), ('publish', 'extra')):
@@ -113,9 +127,13 @@ IDENTITY = 'arn:aws:sts::959435416781:assumed-role/Pyjoyment-Lambda-Layers-dry-r
 
 
 def caller_identity(c):
-    callers.append((c.param('Action'), c.param('Version'), c.req.headers.accept))
-    result = {'Account': '959435416781', 'Arn': IDENTITY, 'UserId': 'AROAEXAMPLE:test'}
-    c.render(json={'GetCallerIdentityResponse': {'GetCallerIdentityResult': result}})
+    callers.append((c.param('Action'), c.param('Version')))
+    c.res.headers.content_type = 'text/xml'
+    c.render(
+        data='<GetCallerIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><GetCallerIdentityResult>'
+        f'<Arn>{IDENTITY}</Arn><UserId>AROAEXAMPLE:test</UserId><Account>959435416781</Account>'
+        '</GetCallerIdentityResult></GetCallerIdentityResponse>'
+    )
 
 
 def list_regions(c):
@@ -183,7 +201,14 @@ aws.routes.get('/<region>/lambda/fail').to(
 app.ua.server.app = aws
 
 environ = dict(os.environ)
+# The credentials of the environment, and no shared files of AWS of the machine, as a profile or an endpoint
 os.environ.update(AWS_ACCESS_KEY_ID='AKIDEXAMPLE', AWS_SECRET_ACCESS_KEY='secret', AWS_SESSION_TOKEN='token')
+none = Pyjo.File.tempdir()
+os.environ.update(
+    AWS_CONFIG_FILE=none.child('config').to_str(), AWS_SHARED_CREDENTIALS_FILE=none.child('none').to_str()
+)
+for name in [n for n in os.environ if n == 'AWS_PROFILE' or n.startswith('AWS_ENDPOINT_URL')]:
+    del os.environ[name]
 home = app.home
 app.home = Pyjo.File.tempdir()
 publish = LambdaLayers.Command.publish.new()
@@ -227,7 +252,7 @@ with subtest('Dry run'):
         'what it would do, with the latest version on the second page',
     )
     is_ok([r for r in requests if r[0] == 'POST' and 'lambda' in r[1]], [], 'nothing published')
-    is_ok(callers[0], ('GetCallerIdentity', '2011-06-15', 'application/json'), 'GetCallerIdentity of STS, in JSON')
+    is_ok(callers[0], ('GetCallerIdentity', '2011-06-15'), 'GetCallerIdentity of STS')
     ok(not os.path.exists(dist.child(f'{python}.json')), 'no ARNs')
     for method, path, authorization in requests:
         region, service = path.split('/')[1:3]
@@ -301,7 +326,7 @@ with subtest('Region that fails'):
     lines = [message.rstrip('\n') for message in messages][1:]
     like_ok(
         lines[0],
-        re.compile(rf'^\[error\] \[fail\] eu-central-1 {python} GET \S+: 503 : Service unavailable$'),
+        re.compile(rf'^\[error\] \[fail\] eu-central-1 {python} 503: Service unavailable$'),
         'error of the region',
     )
     is_ok(
@@ -362,9 +387,10 @@ with subtest('Index'):
     throws_ok(lambda: index.run(), re.compile(r'^Usage: APPLICATION index'), 'usage without a directory')
 
 with subtest('Errors'):
+    aws = LambdaLayers.clients(app.ua, '/{region}/{service}')
     throws_ok(
-        lambda: LambdaLayers.aws(app.ua, 'GET', 'lambda', 'us-east-1', '/fail', endpoint='/{region}/{service}'),
-        re.compile(r'^GET \S*/us-east-1/lambda/fail: 400 ValidationException: Bad request'),
+        lambda: aws('lambda', 'us-east-1').call(Pyjo.AWS.Protocol.RestJSON.new('GET', '/fail')),
+        re.compile(r'^ValidationException: Bad request'),
         'error of AWS',
     )
     throws_ok(

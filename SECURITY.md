@@ -61,11 +61,10 @@ its ARN.
 
 In scope is everything this repository builds and publishes:
 
-- the layers: how Python and Pyjoyment are packaged into them, their
-  contents beyond what Python and Pyjoyment ship, and their permissions,
+- the layers: how Python, Pyjoyment and Pyjo-AWS are packaged into them,
+  their contents beyond what these ship, and their permissions,
 - the index of the layers, `layers.json` of the releases,
-- the commands of `layers.py` and the modules of `LambdaLayers`, and
-  `Pyjo.AWS.SigV4`, which signs the requests to AWS,
+- the commands of `layers.py` and the modules of `LambdaLayers`,
 - the configuration of the account `959435416781` in `tofu/`, as the roles
   that the workflows assume and the trust of their OIDC tokens,
 - the workflows that build and publish the layers.
@@ -74,6 +73,9 @@ Report these elsewhere:
 
 - vulnerabilities in Pyjoyment itself, to
   [Pyjoyment](https://github.com/pyjoyment/Pyjoyment/security),
+- vulnerabilities in Pyjo-AWS, which the layer of Pyjoyment has and which
+  signs the requests of the publication to AWS, to
+  [Pyjo-AWS](https://github.com/pyjoyment/Pyjo-AWS/security),
 - vulnerabilities in Python itself, to the
   [Python Security Response Team](https://www.python.org/dev/security/),
 - vulnerabilities in the builds of python-build-standalone, which the layers
