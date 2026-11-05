@@ -109,7 +109,7 @@ lint:
           - lint
           - format
     - taplo@0.10.0
-    - tofu@1.13.2
+    - tofu@1.13.8
     # yamllint checks what Biome does not, as the duplicated keys and the
     # values that YAML 1.1 reads otherwise
     - yamllint@1.38.0
