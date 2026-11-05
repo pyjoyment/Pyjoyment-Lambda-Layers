@@ -34,8 +34,7 @@ number of a version of a layer tells nothing, and the description of a layer
 is not in its ARN. The version of Pyjo-AWS is in the description only, so its
 bump is a new version of the same layer. A release of Pyjoyment gives new
 layers, and those of the previous version get no new versions after it, not
-even of a fix of the build. The layers `pyjoyment-python3_*` of AWS, without
-the version, are of the releases before it, and stay at their last versions.
+even of a fix of the build.
 
 The command line of Pyjoyment builds the files, `generate lambda-zip`, whose
 files of the same input are the same. The build of Python is the one that the
@@ -146,8 +145,7 @@ out, so the tag is not a pre-release of `0.3.0`, as `0.3.0-2026.11.05` would
 be. The releases of a version of Pyjoyment are those of the tags of its
 prefix, `0.3.0+`, and the latest of them has the layers of that version: GitHub
 has no latest release of a prefix, so it is the first of `gh release list`
-whose tag has it. The tags of the releases before the versioned layers are the
-date alone, as `2026.11.03`.
+whose tag has it.
 
 The index of the latest release is at
 `releases/latest/download/layers.json`, so its format,
