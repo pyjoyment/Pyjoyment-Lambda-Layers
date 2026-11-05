@@ -12,9 +12,10 @@ and of the architectures of ``layers.toml``, for the commands of
 ``layers.py``, :mod:`LambdaLayers.Command.build`,
 :mod:`LambdaLayers.Command.matrix` and :mod:`LambdaLayers.Command.publish`:
 ``python3_14-arm64``, Python for one architecture, and
-``pyjoyment-python3_14``, Pyjoyment and Pyjo-AWS for both, which is the same
-file for both, so the build of each architecture writes it, and the first
-architecture of ``layers.toml`` publishes it.
+``pyjoyment-0_3_0-python3_14``, Pyjoyment and Pyjo-AWS for both, which is
+the same file for both, so the build of each architecture writes it, and the
+first architecture of ``layers.toml`` publishes it. The index of the layers
+has its alias too, ``pyjoyment-python3_14``, with the same ARNs.
 
 The APIs of AWS are called with the clients of :mod:`Pyjo.AWS.Client`, of
 :func:`clients`.
@@ -36,6 +37,7 @@ import Pyjo.UserAgent
 from Pyjo.Util import b64_encode, sha256_bytes
 
 import importlib.metadata
+import re
 import subprocess
 import sys
 import zipfile
@@ -50,6 +52,9 @@ LAYERS = '/2018-10-31/layers'
 # there with the namespace Pyjo, and which a generator that moves less would leave in function.zip
 LAYERED = ('Pyjo/AWS',)
 
+# The layers of Pyjoyment of a version of Pyjoyment, whose alias in the index is the name without it
+VERSIONED = re.compile(r'^pyjoyment-[^-]+-(python[^-]+)$')
+
 type Config = dict[str, Any]
 
 type Clients = Callable[[str, str], Pyjo.AWS.Client.object]
@@ -60,9 +65,11 @@ def python_layer(python: str, arch: str) -> str:
     return f'python{python.replace(".", "_")}-{arch}'
 
 
-def pyjoyment_layer(python: str) -> str:
-    """The name of the layer of Pyjoyment of a version of Python."""
-    return f'pyjoyment-python{python.replace(".", "_")}'
+def pyjoyment_layer(python: str, pyjoyment: str | None = None) -> str:
+    """The name of the layer of Pyjoyment of a version of Python and of Pyjoyment, the installed one by default, with
+    `_` for the characters that Lambda does not take in a name, as the dots."""
+    version = pyjoyment or importlib.metadata.version('Pyjoyment')
+    return f'pyjoyment-{re.sub(r"[^A-Za-z0-9]", "_", version)}-python{python.replace(".", "_")}'
 
 
 def matrix(config: Config) -> dict[str, list[dict[str, str]]]:
@@ -119,7 +126,7 @@ def publications(config: Config, python: str | None, arch: str | None) -> list[t
                     'CompatibleArchitectures': config['architectures'],
                     'LicenseInfo': 'Artistic-2.0',
                 }
-                result.append((pyjoyment_layer(version), params))
+                result.append((pyjoyment_layer(version, pyjoyment), params))
     return result
 
 
@@ -243,6 +250,12 @@ def index(arns: Pyjo.File.object) -> dict[str, dict[str, str]]:
     return {
         file.basename('.json'): Pyjo.JSON.decode_json(file.slurp()) for file in arns.list() if file.extname == 'json'
     }
+
+
+def aliases(index: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+    """The index with the alias of each layer of Pyjoyment of a version of Pyjoyment, as pyjoyment-python3_14 of
+    pyjoyment-0_3_0-python3_14, with the same ARNs, which no layer of AWS has as its name."""
+    return {**index, **{f'pyjoyment-{m[1]}': arns for layer, arns in index.items() if (m := VERSIONED.match(layer))}}
 
 
 def new_versions(index: dict[str, dict[str, str]], latest: dict[str, dict[str, str]]) -> dict[str, list[int]]:

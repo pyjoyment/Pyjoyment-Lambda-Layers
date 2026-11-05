@@ -10,6 +10,7 @@ from Pyjo.Test import *
 from Pyjo.Util import b64_decode, b64_encode, sha256_bytes
 
 import contextlib
+import importlib.metadata
 import io
 import os
 import re
@@ -37,7 +38,17 @@ def digest(content):
 with subtest('Names'):
     is_ok(LambdaLayers.python_layer('3.14', 'arm64'), 'python3_14-arm64', 'layer of Python')
     is_ok(LambdaLayers.python_layer('3.14t', 'x86_64'), 'python3_14t-x86_64', 'layer of a free-threaded Python')
-    is_ok(LambdaLayers.pyjoyment_layer('3.14'), 'pyjoyment-python3_14', 'layer of Pyjoyment')
+    is_ok(LambdaLayers.pyjoyment_layer('3.14', '0.3.0'), 'pyjoyment-0_3_0-python3_14', 'layer of Pyjoyment')
+    is_ok(
+        LambdaLayers.pyjoyment_layer('3.14t', '1.0.0rc1'),
+        'pyjoyment-1_0_0rc1-python3_14t',
+        'layer of a pre-release of Pyjoyment for a free-threaded Python',
+    )
+    is_ok(
+        LambdaLayers.pyjoyment_layer('3.14'),
+        LambdaLayers.pyjoyment_layer('3.14', importlib.metadata.version('Pyjoyment')),
+        'layer of the installed Pyjoyment',
+    )
     for name, _ in LambdaLayers.publications(config, None, None):
         like_ok(name, re.compile(r'^[A-Za-z0-9_-]+$'), f'{name} is a name that Lambda takes')
 
@@ -63,7 +74,7 @@ with subtest('Publications'):
                 },
             ),
             (
-                'pyjoyment-python3_14',
+                LambdaLayers.pyjoyment_layer('3.14'),
                 {
                     'Description': LambdaLayers.publications(config, '3.14', first)[1][1]['Description'],
                     'CompatibleRuntimes': ['provided.al2023', 'python3.14'],
@@ -215,7 +226,7 @@ publish = LambdaLayers.Command.publish.new()
 publish.app = app
 publish.endpoint = '/{region}/{service}'
 dist = app.home.child('dist').make_path()
-python, layer = f'python3_14-{config["architectures"][0]}', 'pyjoyment-python3_14'
+python, layer = f'python3_14-{config["architectures"][0]}', LambdaLayers.pyjoyment_layer('3.14')
 dist.child(f'{python}.zip').spew(b'python')
 dist.child(f'{layer}.zip').spew(b'pyjoyment')
 arn = f'arn:aws:lambda:us-east-1:959435416781:layer:{layer}'
@@ -357,12 +368,15 @@ with subtest('Index'):
     output, notes, latest = tmp.child('layers.json'), tmp.child('notes.md'), tmp.child('latest.json')
     with app.log.capture('info') as messages:
         index.run('-o', output.to_str(), arns.to_str())
+    layers = (
+        f'{{"eu-central-1":"{account.format("eu-central-1", layer, 2)}",'
+        f'"us-east-1":"{account.format("us-east-1", layer, 2)}"}}'
+    )
     is_ok(
         output.slurp().decode(),
-        f'{{"{layer}":{{"eu-central-1":"{account.format("eu-central-1", layer, 2)}",'
-        f'"us-east-1":"{account.format("us-east-1", layer, 2)}"}},'
+        f'{{"{layer}":{layers},"pyjoyment-python3_14":{layers},'
         f'"{python}":{{"us-east-1":"{account.format("us-east-1", python, 1)}"}}}}\n',
-        'index with its keys sorted',
+        'index with its keys sorted, and the alias of the layer of Pyjoyment',
     )
     is_ok([m.rstrip('\n') for m in messages], [f'[info] [write] {output}'], 'written')
 
