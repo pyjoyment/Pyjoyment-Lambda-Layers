@@ -10,7 +10,6 @@ on:
     paths:
       - .github/workflows/publish.yaml
       - LambdaLayers/**
-      - Pyjo/**
       - layers.py
       - layers.toml
       - mise.lock

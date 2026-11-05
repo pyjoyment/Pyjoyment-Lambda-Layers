@@ -59,4 +59,4 @@ lines-after-imports = 2
 venvPath = "."
 venv = ".venv"
 typeCheckingMode = "off"
-strict = ["LambdaLayers/**", "Pyjo/**"]
+strict = ["LambdaLayers/**"]
