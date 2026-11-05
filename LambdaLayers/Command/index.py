@@ -33,7 +33,7 @@ import Pyjoyment.Command
 
 from Pyjo.Util import extract_usage, getopt
 
-from typing import Any, cast
+from typing import Any
 
 
 class LambdaLayers_Command_index(Pyjoyment.Command.object):
@@ -66,7 +66,7 @@ class LambdaLayers_Command_index(Pyjoyment.Command.object):
         if not opts.latest:
             return
 
-        latest: Any = Pyjo.JSON.decode_json(cast(bytes, Pyjo.File.path(opts.latest).slurp()))
+        latest: Any = Pyjo.JSON.decode_json(Pyjo.File.path(opts.latest).slurp())
         if not (versions := LambdaLayers.new_versions(index, latest)):
             log.info('[same] the layers of the latest release')
             return
