@@ -22,10 +22,10 @@ them in its ZIP file.
 - `python3_14-arm64`, `python3_14t-x86_64`, ...: Python, for the custom
   runtime `provided.al2023`, of one version and one architecture, the
   free-threaded build too.
-- `pyjoyment-python3_14`, `pyjoyment-python3_14t`, ...: Pyjoyment and
-  [Pyjo-AWS](https://github.com/pyjoyment/Pyjo-AWS), for both architectures,
-  with the layer of Python on `provided.al2023` or on the runtime of Python of
-  AWS Lambda of the same version.
+- `pyjoyment-0_3_0-python3_14`, `pyjoyment-0_3_0-python3_14t`, ...: a
+  version of Pyjoyment and [Pyjo-AWS](https://github.com/pyjoyment/Pyjo-AWS),
+  for both architectures, with the layer of Python on `provided.al2023` or on
+  the runtime of Python of AWS Lambda of the same version.
 
 The layers are published by the account `959435416781` in the commercial
 regions of AWS, as
@@ -33,8 +33,8 @@ regions of AWS, as
 layer is never deleted.
 
 `generate lambda-zip --function-only` of Pyjoyment builds the function that
-uses them, `function.zip` alone, and names the layer of Pyjoyment that it
-needs:
+uses them, `function.zip` alone, and names the version of Pyjoyment of the
+layer that it needs:
 
 ```sh
 ./myapp.py generate lambda-zip --python 3.14 --arch arm64 --function-only
@@ -43,9 +43,11 @@ needs:
 ## The ARNs
 
 A function takes a layer by the ARN of a version, which the index of the
-layers gives, `layers.json` of each release, as `{layer: {region: arn}}`.
-The latest one is always at the same URL, which a one-liner of Pyjoyment
-reads with a JSON Pointer:
+layers gives, `layers.json` of each release, as `{layer: {region: arn}}`. It
+has the layers of the latest Pyjoyment, and for each of them an alias without
+the version of Pyjoyment, as `pyjoyment-python3_14`, with the same ARNs. The
+latest one is always at the same URL, which a one-liner of Pyjoyment reads
+with a JSON Pointer:
 
 ```sh
 uv run --with Pyjoyment python -m Pyjo \
@@ -55,8 +57,15 @@ uv run --with Pyjoyment python -m Pyjo \
 `curl -sL` of the same URL with `jq -r '.["pyjoyment-python3_14"]["eu-central-1"]'`
 gives the same without Python.
 
-A release, as `2026.11.03`, keeps its index, so that a deployment can stay
-on the layers of a day.
+A release, as `0.3.0+2026.11.05`, of the version of Pyjoyment and the date,
+keeps its index, so that a deployment can stay on the layers of a day. The
+latest release of a version of Pyjoyment, whose index has its layers, is the
+first one whose tag has its prefix:
+
+```sh
+gh release list --repo pyjoyment/Pyjoyment-Lambda-Layers --limit 1000 \
+  --json tagName --jq '[.[].tagName | select(startswith("0.3.0+"))][0]'
+```
 
 ## License
 

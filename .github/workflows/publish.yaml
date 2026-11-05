@@ -132,8 +132,8 @@ jobs:
 
   # The ARNs of the latest versions of every layer in every region, as one
   # index, {layer: {region: arn}}, released when it differs from the one of
-  # the latest release, with a tag of the date, so that
-  # releases/latest/download/layers.json is the index of the layers
+  # the latest release, with a tag of the version of Pyjoyment and the date,
+  # so that releases/latest/download/layers.json is the index of the layers
   index:
     name: Index
 
@@ -190,18 +190,21 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      # The tag of the date, with a number of the day for another release of
-      # the same day
+      # The tag of the version of Pyjoyment and the date, as its build
+      # metadata, with a number of the day for another release of the same
+      # day. Latest explicitly, which GitHub otherwise takes from the highest
+      # semantic version too, as 2026.11.05 of the tags of the date alone.
       - name: Release
         run: |
           if [[ ! -f notes.md ]]; then
             exit 0
           fi
+          version=$(uv run python -c 'import importlib.metadata; print(importlib.metadata.version("Pyjoyment"))')
           day=$(date -u +%Y.%m.%d)
-          tag=$day
+          tag="$version+$day"
           number=1
           while gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; do
             number=$((number + 1))
-            tag="$day.$number"
+            tag="$version+$day.$number"
           done
-          gh release create "$tag" layers.json --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$tag" --notes-file notes.md
+          gh release create "$tag" layers.json --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$tag" --notes-file notes.md --latest

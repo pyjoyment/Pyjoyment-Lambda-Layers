@@ -19,10 +19,13 @@ LambdaLayers.Command.index - Index command
 :mod:`LambdaLayers.Command.index` merges the ARNs of the layers that
 :mod:`LambdaLayers.Command.publish` writes, one file of each layer in a
 directory, into the index of the layers, ``{layer: {region: arn}}``, with its
-keys sorted, so that the same layers give the same file. With ``--latest``,
-it compares the index with the one of the latest release, and with
-``--notes``, it writes the notes of a release with the new versions, only when
-there are some, which tells the workflow to release.
+keys sorted, so that the same layers give the same file, and with the alias of
+each layer of Pyjoyment of a version of Pyjoyment, as
+``pyjoyment-python3_14`` of ``pyjoyment-0_3_0-python3_14``, with the same
+ARNs. With ``--latest``, it compares the index with the one of the latest
+release, and with ``--notes``, it writes the notes of a release with the new
+versions, without the aliases, only when there are some, which tells the
+workflow to release.
 """
 
 import LambdaLayers
@@ -59,9 +62,10 @@ class LambdaLayers_Command_index(Pyjoyment.Command.object):
             raise Pyjo.Exception.new(self.usage)
         log = self.app.log
 
+        # The new versions are of the layers without their aliases, which would list each layer of Pyjoyment twice
         index = LambdaLayers.index(Pyjo.File.path(arguments[0]))
         output = Pyjo.File.path(opts.output or 'layers.json')
-        output.spew(Pyjo.JSON.to_json(index, sort_keys=True) + '\n')
+        output.spew(Pyjo.JSON.to_json(LambdaLayers.aliases(index), sort_keys=True) + '\n')
         log.info(f'[write] {output}')
         if not opts.latest:
             return
