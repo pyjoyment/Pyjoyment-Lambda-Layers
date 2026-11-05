@@ -38,8 +38,9 @@ the standard error, at once, in the format of ``--log-format``, where
 region that fails, as one that does not answer, is logged as an error, the
 others go on, and the command fails at its end.
 
-The requests to the APIs of AWS are signed with :mod:`Pyjo.AWS.SigV4`, with
-the credentials of the environment.
+The APIs of AWS are called with :mod:`Pyjo.AWS.Client`, with the credentials
+that the AWS CLI finds, of the environment, as those of the OIDC of GitHub
+Actions, or of a profile, as one of SSO, of ``AWS_PROFILE``.
 """
 
 import LambdaLayers
@@ -62,14 +63,15 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
 
     usage = extract_usage()
 
-    endpoint = LambdaLayers.ENDPOINT
+    endpoint: str | None = None
     """::
 
         endpoint = publish.endpoint
         publish.endpoint = '/{region}/{service}'
 
     The URL of the APIs of AWS, with the placeholders ``service`` and
-    ``region``, which a test serves itself.
+    ``region``, which a test serves itself, or ``None`` by default, for the
+    endpoints of the environment, of the profile, or the regional ones.
     """
 
     def run(self, *args: str) -> None:
@@ -104,17 +106,18 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
 
         # The identity of the credentials first, so that the log shows the account and the role that the run used
         log = self.app.log
-        caller = LambdaLayers.identity(ua, self.endpoint)
+        aws = LambdaLayers.clients(ua, self.endpoint)
+        caller = LambdaLayers.identity(aws)
         log.info(f'[identity] {caller["Account"]} {caller["Arn"]}')
 
         excluded = config.get('excluded_regions', [])
-        regions = [region for region in LambdaLayers.regions(ua, self.endpoint) if region not in excluded]
+        regions = [region for region in LambdaLayers.regions(aws) if region not in excluded]
         failed: list[str] = []
         for name, params in selected:
             path = dist.child(f'{name}.zip')
             arns: dict[str, str | None] = {}
             for region, action, arn in LambdaLayers.publish(
-                ua, regions, name, params, path, bool(opts.apply), self.endpoint, opts.concurrency or 4
+                aws, regions, name, params, path, bool(opts.apply), opts.concurrency or 4
             ):
                 if action == 'error':
                     log.error(f'[fail] {region} {name} {arn}')

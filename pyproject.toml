@@ -7,8 +7,8 @@ license = "Artistic-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Piotr Roszatycki", email = "piotr.roszatycki@gmail.com" }]
 requires-python = ">=3.12"
-# The Pyjoyment of the layers, which Renovate bumps in uv.lock
-dependencies = ["Pyjoyment>=0.2.0"]
+# The Pyjoyment and the Pyjo-AWS of the layer of Pyjoyment, which Renovate bumps in uv.lock
+dependencies = ["Pyjo-AWS>=0.1.0", "Pyjoyment>=0.3.0"]
 
 # Not a package: the repository builds and publishes the layers, and installs nothing of its own
 [tool.uv]
