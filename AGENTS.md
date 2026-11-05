@@ -17,8 +17,8 @@ The names are predictable, as a user writes them in an ARN, and have only
 - `python<major>_<minor>[t]-<arch>`: `python.zip` of `generate lambda-zip`,
   Python of python-build-standalone for one architecture, for
   `provided.al2023`.
-- `pyjoyment-python<major>_<minor>[t]`: `pyjoyment.zip`, Pyjoyment in
-  `python/lib/python3.X/site-packages`, whose path and bytecode are of one
+- `pyjoyment-python<major>_<minor>[t]`: `pyjoyment.zip`, Pyjoyment and
+  Pyjo-AWS in `python/lib/python3.X/site-packages`, whose path and bytecode are of one
   version of Python but of no architecture, for `provided.al2023` and the
   runtime of Python of AWS Lambda of the same version.
 
@@ -28,7 +28,22 @@ version, and a deleted one cannot be added to a function again.
 The command line of Pyjoyment builds the files, `generate lambda-zip`, whose
 files of the same input are the same. The build of Python is the one that the
 uv of `mise.toml` installs, so a bump of uv gives a new layer of Python with
-the same Pyjoyment, and the Pyjoyment of the layers is the one of `uv.lock`.
+the same Pyjoyment, and the Pyjoyment and the Pyjo-AWS of the layers are those
+of `uv.lock`.
+
+Pyjo-AWS is in the layer of Pyjoyment, so that a function on the public layers
+calls AWS without a dependency of its own, as a function of
+`generate lambda-zip --function-only` leaves out the namespace `Pyjo` of its
+dependencies, which the layer is to have. It is a dependency of the project,
+not of the group `dev`, which `uv export --no-dev` of `generate lambda-zip`
+would leave out, and the commands use the same Pyjo-AWS. Without the extra
+`cryptography`, whose wheels are of an architecture, where the layer is of
+none: `Pyjo.AWS.ECDSA` signs with Python then. `generate lambda-zip` moves the
+whole namespace `Pyjo` to the layer, with Pyjo-AWS, but not its `dist-info`
+(pyjoyment/Pyjoyment#560), and a generator that moves less would leave it in
+the function, so `build` fails when the layer has no package of `LAYERED` of
+`LambdaLayers`, as the dry run of a pull request of Renovate that bumps
+Pyjoyment then shows.
 
 `layers.py` is an application of `Pyjoyment.Lite`, whose configuration is
 `layers.toml` of `TOMLConfig`, with the versions of Python, the architectures
@@ -70,8 +85,8 @@ A run is started by hand or on a schedule, not on a push, and a run that
 failed is run again.
 
 The regions of a layer are done at the same time, four of them by default, as
-`--concurrency` says, with the requests of `Pyjo.UserAgent` that give promises,
-in the coroutine of a region, which `Pyjo.Iterator.map` runs ahead, so that
+`--concurrency` says, with the calls of `Pyjo.AWS.Client` that give promises,
+`call_p`, in the coroutine of a region, which `Pyjo.Iterator.map` runs ahead, so that
 the regions come out in their order as they are done. A layer of Python of 17
 MB to more than thirty regions one after another takes minutes, and a region
 that answers slowly holds back only one of the four.
@@ -112,22 +127,28 @@ contract: a change of it breaks whoever reads it. A failed job of the
 publication releases nothing, as the index would miss its layers; the next
 run, which keeps what is published already, releases them all.
 
-The requests are signed with the credentials of the environment, which
-`Pyjo.AWS.SigV4` reads, not with a profile of AWS, so a run on a machine with
-a profile of SSO exports its credentials first:
+The APIs of AWS are called with `Pyjo.AWS.Client` of Pyjo-AWS, with the
+credentials that the AWS CLI finds, of the environment first, which
+`aws-actions/configure-aws-credentials` of the workflows sets, and of a
+profile, so a run on a machine takes a profile of SSO or of `aws login`
+directly:
 
 ```sh
-eval "$(aws configure export-credentials --profile <profile> --format env)"
+AWS_PROFILE=<profile> mise exec -- uv run python layers.py publish --python 3.14 --arch arm64
 ```
 
-or puts them in `.env`, which `.gitignore` ignores, and which `uv run` reads:
-
-```sh
-mise exec -- uv run --env-file .env python layers.py publish --python 3.14 --arch arm64
-```
+The clients of `clients` of `LambdaLayers`, one for a service in a region,
+share one configuration and one chain of credentials, so that those of a
+profile are read or refreshed once, and the user agent of the application, with
+the timeouts of `publish`. The errors that `publish` allows, 404 of a layer
+that a region has not and 409 of a version that is public already, are a
+`Pyjo.AWS.Error` with its `status`.
 
 `t/layers_commands.py` runs the commands against an application of Pyjoyment
-that serves the APIs of AWS that they use, by the `endpoint` of `publish`.
+that serves the APIs of AWS that they use, by the `endpoint` of `publish`, with
+the placeholders `service` and `region`, which an endpoint of
+`AWS_ENDPOINT_URL_<SERVICE>` has not, and without the shared files of AWS of
+the machine.
 
 ## The Account
 
@@ -173,30 +194,6 @@ account starts with a local state: `tofu/backend_override.tf`, which
 the apply, which creates the bucket, and then, without the file,
 `tofu init -migrate-state`.
 
-## Signature Version 4
-
-`Pyjo.AWS.SigV4` signs the requests of `Pyjo.UserAgent` to the APIs of AWS,
-without an SDK. It is a module of the namespace `Pyjo` of Pyjoyment, which
-`extend_path` keeps open: the directory `Pyjo` of the repository has no
-`__init__.py`, only `Pyjo/AWS` has one, so that it can move to a distribution
-of its own without a change of its imports.
-
-The event `start` of the user agent signs a request, as it comes for each
-transaction, a redirect too, once the request is complete. The request has no
-`Host` and no `Content-Length` then, which `fix_headers` of the request adds
-when it is written, so `sign` sets `Host` itself, and `Content-Length` is not
-signed, which AWS does not require. The headers that a proxy or the user agent
-may change after the signature, as `User-Agent` and `Expect`, are not signed,
-as the SDKs of AWS leave them.
-
-The path of the canonical request is the one that HTTP sends, already
-percent-encoded, which `double_encode` encodes again, as every service but S3
-wants. `t/aws-signing-test-suite` has the cases of the test suite of
-aws-c-auth, kept as they are, which `biome.jsonc` leaves out. The suite sends a
-path with a space or UTF-8 as it is, which HTTP cannot, so the test skips
-those cases, and the one of a session token that is not signed, of AWS IoT,
-which `Pyjo.AWS.SigV4` does not have.
-
 ## Tests
 
 The tests are scripts of `Pyjo.Test` in `t`, which `Pyjo.Prove` runs, on the
@@ -208,8 +205,7 @@ PYTHONDEVMODE=1 mise exec -- uv run python -m Pyjo.Prove -l --capture-stderr -r 
 PYJO_REACTOR=Pyjo.Reactor.Poll PYTHONDEVMODE=1 mise exec -- uv run python -m Pyjo.Prove -l --capture-stderr -r t
 ```
 
-`-l` puts the checkout in `PYTHONPATH`, where `extend_path` of the `Pyjo` of
-Pyjoyment finds the modules of `Pyjo` of the repository.
+`-l` puts the checkout in `PYTHONPATH`, where the tests find `LambdaLayers`.
 
 ## Development
 
@@ -258,9 +254,8 @@ GITHUB_TOKEN=$(gh auth token) trunk check --all --no-fix
 
 Its pyright needs the environment of `uv sync`, `.venv`, which `tool.pyright`
 of `pyproject.toml` names, as the code imports Pyjoyment; Trunk Check of CI
-runs `uv sync` first. `LambdaLayers` and the modules of `Pyjo` of the repository are
-checked in strict mode, and the tests are not checked: for them pyright takes the regular
-package `Pyjo` of Pyjoyment, which hides the modules of the checkout.
+runs `uv sync` first. `LambdaLayers` is checked in strict mode, and the tests
+are not checked.
 
 The workflows that start the checks of a commit of the token of a workflow, as
 Automated trunk upgrade and Biome Migrate, start every check that the ruleset
