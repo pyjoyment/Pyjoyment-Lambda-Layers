@@ -1,4 +1,4 @@
-[![Home](https://img.shields.io/badge/%F0%9F%8F%A0-Pyjoyment-02a7a0)](https://github.com/pyjoyment/Pyjoyment)
+[![Home](https://img.shields.io/badge/%F0%9F%8F%A0-Pyjoyment-02a7a0)](https://pyjoyment.dev/)
 [![GitHub](https://img.shields.io/github/stars/pyjoyment/Pyjoyment-Lambda-Layers?style=flat&label=GitHub%20%E2%AD%90&logo=github)](https://github.com/pyjoyment/Pyjoyment-Lambda-Layers)
 [![License](https://img.shields.io/github/license/pyjoyment/Pyjoyment-Lambda-Layers.svg)](https://github.com/pyjoyment/Pyjoyment-Lambda-Layers/blob/main/LICENSE)
 [![Tests](https://github.com/pyjoyment/Pyjoyment-Lambda-Layers/actions/workflows/tests.yaml/badge.svg?branch=main)](https://github.com/pyjoyment/Pyjoyment-Lambda-Layers/actions/workflows/tests.yaml)
@@ -15,7 +15,7 @@
 </p>
 
 Public layers of AWS Lambda with Python and with
-[Pyjoyment](https://github.com/pyjoyment/Pyjoyment), for the event functions
+[Pyjoyment](https://pyjoyment.dev/), for the event functions
 of Pyjoyment, so that a function takes them by their ARNs instead of carrying
 them in its ZIP file.
 
