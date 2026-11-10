@@ -48,9 +48,9 @@ from typing import Any, cast
 
 LAYERS = '/2018-10-31/layers'
 
-# The packages of the distributions that the layer of Pyjoyment has besides Pyjoyment, which generate lambda-zip moves
-# there with the namespace Pyjo, and which a generator that moves less would leave in function.zip
-LAYERED = ('Pyjo/AWS',)
+# The distributions that the layer of Pyjoyment has besides Pyjoyment, which --layer-package of generate lambda-zip moves
+# there with their metadata, and their packages
+LAYERED = {'Pyjo-AWS': 'Pyjo/AWS'}
 
 # The layers of Pyjoyment of a version of Pyjoyment, whose alias in the index is the name without it
 VERSIONED = re.compile(r'^pyjoyment-[^-]+-(python[^-]+)$')
@@ -86,6 +86,7 @@ def build(home: Pyjo.File.object, python: str, arch: str, dist: Pyjo.File.object
         for name in ('pyproject.toml', 'uv.lock'):
             home.child(name).copy_to(tmp.child(name))
         command = [sys.executable, '-m', 'Pyjoyment', 'generate', 'lambda-zip', '--python', python, '--arch', arch]
+        command.extend(f'--layer-package={d}' for d in LAYERED)
         if (code := subprocess.run(command, cwd=tmp, stdout=subprocess.DEVNULL).returncode) != 0:
             raise Pyjo.Exception.new(f'Command "generate lambda-zip" failed with exit status {code}')
         files = {'python.zip': python_layer(python, arch), 'pyjoyment.zip': pyjoyment_layer(python)}
@@ -98,10 +99,20 @@ def build(home: Pyjo.File.object, python: str, arch: str, dist: Pyjo.File.object
 
 
 def missing(path: Pyjo.File.object) -> list[str]:
-    """The packages of LAYERED that a ZIP file of the layer of Pyjoyment has not in its site-packages."""
+    """The distributions of LAYERED that a ZIP file of the layer of Pyjoyment has not in its site-packages, as their
+    package or their metadata, of the name that PEP 503 normalizes with `_`."""
     with zipfile.ZipFile(path) as file:
         names = file.namelist()
-    return [p for p in LAYERED if not any(n.endswith(f'/site-packages/{p}/__init__.py') for n in names)]
+
+    def has(distribution: str, package: str) -> bool:
+        metadata = re.compile(
+            rf'/site-packages/{re.sub(r"[-_.]+", "_", distribution)}-[^/]+\.dist-info/METADATA$', re.I
+        )
+        return any(n.endswith(f'/site-packages/{package}/__init__.py') for n in names) and any(
+            metadata.search(n) for n in names
+        )
+
+    return [d for d, p in LAYERED.items() if not has(d, p)]
 
 
 def publications(config: Config, python: str | None, arch: str | None) -> list[tuple[str, dict[str, Any]]]:
