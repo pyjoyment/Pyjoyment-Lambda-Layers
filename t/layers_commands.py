@@ -108,11 +108,17 @@ with subtest('Packages of the layer of Pyjoyment'):
     with zipfile.ZipFile(tmp.child('layer.zip'), 'w') as file:
         file.writestr(f'{site}/Pyjo/__init__.py', '')
         file.writestr(f'{site}/Pyjo/AWS/__init__.py', '')
+        file.writestr(f'{site}/pyjo_aws-0.1.0.dist-info/METADATA', '')
     is_ok(LambdaLayers.missing(tmp.child('layer.zip')), [], 'with Pyjo-AWS')
     with zipfile.ZipFile(tmp.child('without.zip'), 'w') as file:
         file.writestr(f'{site}/Pyjo/__init__.py', '')
         file.writestr('Pyjo/AWS/__init__.py', '')
-    is_ok(LambdaLayers.missing(tmp.child('without.zip')), ['Pyjo/AWS'], 'without Pyjo-AWS in site-packages')
+        file.writestr('pyjo_aws-0.1.0.dist-info/METADATA', '')
+    is_ok(LambdaLayers.missing(tmp.child('without.zip')), ['Pyjo-AWS'], 'without Pyjo-AWS in site-packages')
+    with zipfile.ZipFile(tmp.child('code.zip'), 'w') as file:
+        file.writestr(f'{site}/Pyjo/__init__.py', '')
+        file.writestr(f'{site}/Pyjo/AWS/__init__.py', '')
+    is_ok(LambdaLayers.missing(tmp.child('code.zip')), ['Pyjo-AWS'], 'without the metadata of Pyjo-AWS')
 
 with subtest('Usage'):
     for args in (('build', '--unknown'), ('build', 'extra'), ('publish', '--unknown'), ('publish', 'extra')):
