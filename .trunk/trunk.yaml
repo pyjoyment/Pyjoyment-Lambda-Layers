@@ -96,20 +96,20 @@ lint:
           run_from: ${root_or_parent_with(biome.jsonc)}
       run_timeout: 1m
   enabled:
-    - tflint@0.65.0
-    - actionlint@1.17.0
+    - tflint@0.66.0
+    - actionlint@1.17.1
     # Renovate bumps it, and Biome Migrate migrates biome.jsonc on its branch;
     # the ! keeps it from trunk upgrade
     - biome@2.6.5! # datasource=npm depName=@biomejs/biome
     - git-diff-check
     - pyright@1.1.414
     # The format command of ruff is disabled in the plugin by default
-    - ruff@0.17.3:
+    - ruff@0.17.5:
         commands:
           - lint
           - format
     - taplo@0.10.0
-    - tofu@1.13.8
+    - tofu@1.13.9
     # yamllint checks what Biome does not, as the duplicated keys and the
     # values that YAML 1.1 reads otherwise
     - yamllint@1.38.0
