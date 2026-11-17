@@ -44,16 +44,17 @@ of `uv.lock`.
 
 Pyjo-AWS is in the layer of Pyjoyment, so that a function on the public layers
 calls AWS without a dependency of its own, as a function of
-`generate lambda-zip --function-only` leaves out the namespace `Pyjo` of its
-dependencies, which the layer is to have. It is a dependency of the project,
-not of the group `dev`, which `uv export --no-dev` of `generate lambda-zip`
-would leave out, and the commands use the same Pyjo-AWS. Without the extra
-`cryptography`, whose wheels are of an architecture, where the layer is of
-none: `Pyjo.AWS.ECDSA` signs with Python then. `generate lambda-zip` moves the
-whole namespace `Pyjo` to the layer, with Pyjo-AWS, but not its `dist-info`
-(pyjoyment/Pyjoyment#560), and a generator that moves less would leave it in
-the function, so `build` fails when the layer has no package of `LAYERED` of
-`LambdaLayers`, as the dry run of a pull request of Renovate that bumps
+`generate lambda-zip --function-only --layer-package Pyjo-AWS` leaves it out
+of its dependencies, which the layer is to have. It is a dependency of the
+project, not of the group `dev`, which `uv export --no-dev` of
+`generate lambda-zip` would leave out, and the commands use the same
+Pyjo-AWS. Without the extra `cryptography`, whose wheels are of an
+architecture, where the layer is of none: `Pyjo.AWS.ECDSA` signs with Python
+then. The layer of Pyjoyment of `generate lambda-zip` has the files of the
+`RECORD` of Pyjoyment only, so `build` passes `--layer-package` for each
+distribution of `LAYERED` of `LambdaLayers`, which moves it to the layer with
+its `dist-info`, and fails when the layer has not its package or its
+`dist-info`, as the dry run of a pull request of Renovate that bumps
 Pyjoyment then shows.
 
 `layers.py` is an application of `Pyjoyment.Lite`, whose configuration is

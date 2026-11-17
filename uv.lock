@@ -35,5 +35,5 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "pyjo-aws", specifier = ">=0.1.0" },
-    { name = "pyjoyment", specifier = ">=0.3.0" },
+    { name = "pyjoyment", specifier = ">=0.4.0" },
 ]
