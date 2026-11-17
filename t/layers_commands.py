@@ -131,6 +131,9 @@ versions = {}
 public = set()
 callers = []
 broken = set()
+# The regions that answer 504 to as many requests as their counts, and the ones that deny every request
+flaky = {}
+denied = set()
 policies = []
 requests = []
 aws = Pyjoyment.new()
@@ -162,6 +165,12 @@ def list_regions(c):
 
 
 def list_versions(c):
+    if flaky.get(c.param('region')):
+        flaky[c.param('region')] -= 1
+        return c.render(json={'message': 'Gateway timeout'}, status=504)
+    if c.param('region') in denied:
+        c.res.headers.header('X-Amzn-ErrorType', 'AccessDeniedException')
+        return c.render(json={'Type': 'User', 'message': 'Not authorized'}, status=403)
     if c.param('region') in broken:
         return c.render(json={'message': 'Service unavailable'}, status=503)
     if (layer := versions.get((c.param('region'), c.param('layer')))) is None:
@@ -231,6 +240,7 @@ app.home = Pyjo.File.tempdir()
 publish = LambdaLayers.Command.publish.new()
 publish.app = app
 publish.endpoint = '/{region}/{service}'
+publish.retry_delay = 0
 dist = app.home.child('dist').make_path()
 python, layer = f'python3_14-{config["architectures"][0]}', LambdaLayers.pyjoyment_layer('3.14')
 dist.child(f'{python}.zip').spew(b'python')
@@ -341,6 +351,10 @@ with subtest('Region that fails'):
             'fails at the end',
         )
     lines = [message.rstrip('\n') for message in messages][1:]
+    retries = [line for line in lines if line.startswith('[warn]')]
+    is_ok(len(retries), 6, 'three retries of the region for each layer')
+    is_ok(retries[0], f'[warn] [retry] eu-central-1 {python} 503: Service unavailable (1/3)', 'retry of the region')
+    lines = [line for line in lines if not line.startswith('[warn]')]
     like_ok(
         lines[0],
         re.compile(rf'^\[error\] \[fail\] eu-central-1 {python} 503: Service unavailable$'),
@@ -353,6 +367,36 @@ with subtest('Region that fails'):
     )
     is_ok(len(lines), 4, 'every layer in every region')
     broken.clear()
+
+with subtest('Retries'):
+    flaky['eu-central-1'] = 2
+    is_ok(
+        logged('--python', '3.14', '--arch', config['architectures'][0])[1:4],
+        [
+            f'[warn] [retry] eu-central-1 {python} 504: Gateway timeout (1/3)',
+            f'[warn] [retry] eu-central-1 {python} 504: Gateway timeout (2/3)',
+            f'[info] [keep] eu-central-1 {python} arn:aws:lambda:eu-central-1:959435416781:layer:{python}:1',
+        ],
+        'done after two retries',
+    )
+    flaky['eu-central-1'] = 1
+    with app.log.capture('info') as messages:
+        throws_ok(
+            lambda: publish.run('--python', '3.14', '--arch', config['architectures'][0], '-r', '0'),
+            re.compile(rf'^Failed in 1 of the regions: eu-central-1 {python}$'),
+            'no retries with -r 0',
+        )
+    is_ok([m for m in messages if m.startswith('[warn]')], [], 'nothing retried')
+    denied.add('eu-central-1')
+    with app.log.capture('info') as messages:
+        throws_ok(
+            lambda: publish.run('--python', '3.14', '--arch', config['architectures'][0]),
+            re.compile(rf'^Failed in 2 of the regions: eu-central-1 {python}, eu-central-1 {layer}$'),
+            'an error that is not transient',
+        )
+    is_ok([m for m in messages if m.startswith('[warn]')], [], 'not retried')
+    denied.clear()
+    flaky.clear()
 
 with subtest('Concurrency'):
     with app.log.capture('info') as messages:
