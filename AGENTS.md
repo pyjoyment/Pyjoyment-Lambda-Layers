@@ -93,8 +93,12 @@ changes nothing. With `--apply`, it publishes the files that differ and makes
 the latest versions public, also a version that an earlier run published and
 did not make public, as `AddLayerVersionPermission` answers 409 for a version
 that is public already, and writes the ARNs of the latest versions in `dist`.
-A run is started by hand or on a schedule, not on a push, and a run that
-failed is run again.
+A region whose error of AWS is transient, a status of 5xx, as 504 of a busy
+region, 429 or no response, is done again from the start, three times, after
+5, 10 and 20 seconds, and the comparison of `CodeSha256` first keeps a version
+that the request published although its response was an error, so that a
+retry does not publish it twice. A run is started by hand or on a schedule,
+not on a push, and a run that failed is run again.
 
 The regions of a layer are done at the same time, four of them by default, as
 `--concurrency` says, with the calls of `Pyjo.AWS.Client` that give promises,

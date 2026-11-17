@@ -19,6 +19,8 @@ LambdaLayers.Command.publish - Publish command
       -h, --help               Show this summary of available options
       -p, --python <version>   Version of Python, as "3.14" or "3.14t", all of
                                layers.toml by default
+      -r, --retries <number>   Retries of a region whose error is transient,
+                               defaults to 3
 
 :mod:`LambdaLayers.Command.publish` shows the account and the ARN of the
 credentials first, of ``GetCallerIdentity`` of STS, so that the log tells
@@ -35,8 +37,12 @@ The regions of a layer are done at the same time, four of them by default,
 and shown in their order, as each is done, in the log of the application, on
 the standard error, at once, in the format of ``--log-format``, where
 ``plain`` leaves out the time and the process that a log of CI adds itself. A
-region that fails, as one that does not answer, is logged as an error, the
-others go on, and the command fails at its end.
+region whose error of AWS is transient, a status of 5xx, as 504 of a busy
+region, 429, or no response, is logged as a warning and done again from the
+start, three times by default, after 5, 10 and 20 seconds, so that a version
+that a request published although its response was an error is kept and made
+public, not published again. A region that fails, also after its retries, is
+logged as an error, the others go on, and the command fails at its end.
 
 The APIs of AWS are called with :mod:`Pyjo.AWS.Client`, with the credentials
 that the AWS CLI finds, of the environment, as those of the OIDC of GitHub
@@ -74,6 +80,16 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
     endpoints of the environment, of the profile, or the regional ones.
     """
 
+    retry_delay: float = 5
+    """::
+
+        delay = publish.retry_delay
+        publish.retry_delay = 0
+
+    The delay in seconds before the first retry of a region, doubled at each
+    next one, 5 by default.
+    """
+
     def run(self, *args: str) -> None:
         """::
 
@@ -85,7 +101,8 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
         if (
             not (
                 opts := getopt(
-                    arguments, {'a|arch=s': None, 'apply': None, 'c|concurrency=i': None, 'p|python=s': None}
+                    arguments,
+                    {'a|arch=s': None, 'apply': None, 'c|concurrency=i': None, 'p|python=s': None, 'r|retries=i': None},
                 )
             )
             or arguments
@@ -113,11 +130,25 @@ class LambdaLayers_Command_publish(Pyjoyment.Command.object):
         excluded = config.get('excluded_regions', [])
         regions = [region for region in LambdaLayers.regions(aws) if region not in excluded]
         failed: list[str] = []
+        retries = 3 if opts.retries is None else opts.retries
         for name, params in selected:
             path = dist.child(f'{name}.zip')
             arns: dict[str, str | None] = {}
+
+            def retried(region: str, error: str, retry: int, name: str = name) -> None:
+                log.warn(f'[retry] {region} {name} {error} ({retry}/{retries})')
+
             for region, action, arn in LambdaLayers.publish(
-                aws, regions, name, params, path, bool(opts.apply), opts.concurrency or 4
+                aws,
+                regions,
+                name,
+                params,
+                path,
+                bool(opts.apply),
+                opts.concurrency or 4,
+                retries=retries,
+                delay=self.retry_delay,
+                retried=retried,
             ):
                 if action == 'error':
                     log.error(f'[fail] {region} {name} {arn}')

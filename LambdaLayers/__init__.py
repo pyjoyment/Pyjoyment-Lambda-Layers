@@ -32,6 +32,7 @@ import Pyjo.Exception
 import Pyjo.File
 import Pyjo.Iterator
 import Pyjo.JSON
+import Pyjo.Promise
 import Pyjo.UserAgent
 
 from Pyjo.Util import b64_encode, sha256_bytes
@@ -207,38 +208,55 @@ def publish(
     path: Pyjo.File.object,
     apply: bool = False,
     concurrency: int = 4,
+    retries: int = 3,
+    delay: float = 5,
+    retried: Callable[[str, str, int], Any] | None = None,
 ) -> Pyjo.Iterator.Pyjo_Iterator[tuple[str, str, str | None]]:
     """Publish a layer in the regions where the latest version differs, only with apply, and make its latest
     versions public: the region, what is done there, and the ARN of the latest version, or the error of a region
     that fails, which leaves the others to go on, in the order of the regions, as many of them at the same time as
-    the concurrency."""
+    the concurrency. A region whose error of AWS is transient, a status of 5xx or 429, or no response, as a timeout,
+    is done again from the start, up to the retries, after the delay in seconds, doubled at each retry, and retried
+    gets the region, the error and the number of the retry."""
     content = path.slurp()
     digest = b64_encode(sha256_bytes(content), '')
 
     async def region_p(region: str) -> tuple[str, str, str | None]:
-        try:
-            client = aws('lambda', region)
-            current = await latest(aws, region, name)
-            # The same content, with the same parameters, as the runtimes of a newer configuration
-            if current is not None and current['Content']['CodeSha256'] == digest and _same(current, params):
-                action = 'keep'
-            elif apply:
-                action = 'publish'
-                body = {**params, 'Content': {'ZipFile': b64_encode(content, '')}}
-                current = await client.call_p(Pyjo.AWS.Protocol.RestJSON.new('POST', f'{LAYERS}/{name}/versions', body))
-            else:
-                action, current = 'would publish', None
-            # Public, also a version that an earlier run published and did not make public, which 409 says it is
-            if apply and current is not None:
-                policy = {'StatementId': 'public', 'Action': 'lambda:GetLayerVersion', 'Principal': '*'}
-                resource = f'{LAYERS}/{name}/versions/{current["Version"]}/policy'
-                try:
-                    await client.call_p(Pyjo.AWS.Protocol.RestJSON.new('POST', resource, policy))
-                except Pyjo.AWS.Error.object as e:
-                    if e.status != 409:
-                        raise
-        except Exception as e:
-            return region, 'error', _message(e)
+        retry = 0
+        while True:
+            try:
+                return await attempt_p(region)
+            except Exception as e:
+                if retry >= retries or not _transient(e):
+                    return region, 'error', _message(e)
+                retry += 1
+                if retried is not None:
+                    retried(region, _message(e), retry)
+                await Pyjo.Promise.timer(delay * 2 ** (retry - 1))
+
+    # An attempt from the start, as the latest version first, so that a version that a request published although
+    # its response was an error is kept and made public, not published again
+    async def attempt_p(region: str) -> tuple[str, str, str | None]:
+        client = aws('lambda', region)
+        current = await latest(aws, region, name)
+        # The same content, with the same parameters, as the runtimes of a newer configuration
+        if current is not None and current['Content']['CodeSha256'] == digest and _same(current, params):
+            action = 'keep'
+        elif apply:
+            action = 'publish'
+            body = {**params, 'Content': {'ZipFile': b64_encode(content, '')}}
+            current = await client.call_p(Pyjo.AWS.Protocol.RestJSON.new('POST', f'{LAYERS}/{name}/versions', body))
+        else:
+            action, current = 'would publish', None
+        # Public, also a version that an earlier run published and did not make public, which 409 says it is
+        if apply and current is not None:
+            policy = {'StatementId': 'public', 'Action': 'lambda:GetLayerVersion', 'Principal': '*'}
+            resource = f'{LAYERS}/{name}/versions/{current["Version"]}/policy'
+            try:
+                await client.call_p(Pyjo.AWS.Protocol.RestJSON.new('POST', resource, policy))
+            except Pyjo.AWS.Error.object as e:
+                if e.status != 409:
+                    raise
         return region, action, current['LayerVersionArn'] if current is not None else None
 
     # The values of the coroutines, which map passes on, where its type has the coroutines themselves
@@ -285,6 +303,13 @@ def _text(dom: Pyjo.DOM.object, selector: str) -> str:
     if (element := dom.at(selector)) is None:
         raise Pyjo.Exception.new(f'No {selector} in the response of AWS')
     return element.text
+
+
+# An error that the same request may not have again: a status of 5xx of AWS, as 504 of a region that is busy, 429 of a
+# throttled request, or no response at all, as a timeout of the user agent or a connection that is closed, which
+# Pyjo.AWS.Error has without a status
+def _transient(e: BaseException) -> bool:
+    return isinstance(e, Pyjo.AWS.Error.object) and (e.status is None or e.status == 429 or e.status >= 500)
 
 
 # The message of an error of a region, of Pyjo.AWS.Error, of Pyjo.Exception or of a promise rejected with a string
