@@ -8,7 +8,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "Piotr Roszatycki", email = "piotr.roszatycki@gmail.com" }]
 requires-python = ">=3.12"
 # The Pyjoyment and the Pyjo-AWS of the layer of Pyjoyment, which Renovate bumps in uv.lock
-dependencies = ["Pyjo-AWS>=0.1.1", "Pyjoyment>=0.4.0"]
+dependencies = ["Pyjo-AWS>=0.1.1", "Pyjoyment>=0.5.0"]
 
 # Not a package: the repository builds and publishes the layers, and installs nothing of its own
 [tool.uv]
