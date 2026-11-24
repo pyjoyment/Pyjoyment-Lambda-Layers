@@ -1,5 +1,5 @@
 [tools]
-opentofu = "1.13.9"
+opentofu = "1.13.10"
 python = "3.15.2"
 uv = "0.13.9"
 
