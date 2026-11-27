@@ -104,12 +104,12 @@ lint:
     - git-diff-check
     - pyright@1.1.414
     # The format command of ruff is disabled in the plugin by default
-    - ruff@0.17.5:
+    - ruff@0.17.6:
         commands:
           - lint
           - format
     - taplo@0.10.0
-    - tofu@1.13.9
+    - tofu@1.13.10
     # yamllint checks what Biome does not, as the duplicated keys and the
     # values that YAML 1.1 reads otherwise
     - yamllint@1.38.0
